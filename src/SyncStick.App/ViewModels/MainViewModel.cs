@@ -9,6 +9,7 @@ using SyncStick.App.Controls;
 using SyncStick.App.Infrastructure;
 using SyncStick.App.Localization;
 using SyncStick.App.Services;
+using SyncStick.App.Views.Dialogs;
 using SyncStick.Core;
 using SyncStick.Core.Models;
 using SyncStick.Engine;
@@ -37,6 +38,7 @@ public sealed class MainViewModel : ObservableObject
         NavItems = new ObservableCollection<NavItemViewModel>
         {
             new("dashboard", "同步总览", "Icon.Dashboard"),
+            new("rules", "规则", "Icon.Shield"),
             new("sources", "同步内容", "Icon.Folder"),
             new("devices", "目标设备", "Icon.Usb"),
             new("activity", "活动记录", "Icon.Clock"),
@@ -51,6 +53,8 @@ public sealed class MainViewModel : ObservableObject
         ClearTargetCommand = new RelayCommand(ClearTarget);
         OpenDataFolderCommand = new RelayCommand(OpenDataFolder);
         ClearActivitiesCommand = new RelayCommand(ClearActivities);
+        NewRuleCommand = new RelayCommand(NewRule);
+        EditActiveRuleSourcesCommand = new RelayCommand(EditActiveRuleSources);
 
         _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4.2) };
         _toastTimer.Tick += (_, _) =>
@@ -71,6 +75,7 @@ public sealed class MainViewModel : ObservableObject
             RefreshAll();
         });
         _coordinator.Notice += (_, args) => OnUi(() => ShowToast(args.Message, args.IsError));
+        _coordinator.RuleSelectionRequested += (_, args) => OnUi(() => OnRuleSelectionRequested(args));
 
         RefreshAll();
         SetPageSelection("dashboard");
@@ -88,6 +93,8 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<ActivityRowViewModel> RecentActivities { get; } = new();
 
+    public ObservableCollection<RuleRowViewModel> Rules { get; } = new();
+
     public RelayCommand NavigateCommand { get; }
 
     public RelayCommand AddFolderCommand { get; }
@@ -103,6 +110,10 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenDataFolderCommand { get; }
 
     public RelayCommand ClearActivitiesCommand { get; }
+
+    public RelayCommand NewRuleCommand { get; }
+
+    public RelayCommand EditActiveRuleSourcesCommand { get; }
 
     private AppSettings Settings => _coordinator.Settings;
 
@@ -121,6 +132,7 @@ public sealed class MainViewModel : ObservableObject
             }
 
             OnPropertyChanged(nameof(IsDashboardPage));
+            OnPropertyChanged(nameof(IsRulesPage));
             OnPropertyChanged(nameof(IsSourcesPage));
             OnPropertyChanged(nameof(IsDevicesPage));
             OnPropertyChanged(nameof(IsActivityPage));
@@ -129,6 +141,8 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool IsDashboardPage => CurrentPageKey == "dashboard";
+
+    public bool IsRulesPage => CurrentPageKey == "rules";
 
     public bool IsSourcesPage => CurrentPageKey == "sources";
 
@@ -431,7 +445,9 @@ public sealed class MainViewModel : ObservableObject
             }
 
             return AutoSyncEnabled
-                ? $"自动同步已就绪。也可以现在手动写入 {SourceCountText}。"
+                ? Loc.IsEnglish
+                    ? "Auto-sync is ready. You can also start a manual sync now."
+                    : $"自动同步已就绪。也可以现在手动写入 {SourceCountText}。"
                 : "自动同步已暂停，点击“立即同步”即可写入。";
         }
     }
@@ -892,6 +908,268 @@ public sealed class MainViewModel : ObservableObject
             : "语言已保存，重启 SyncStick 后生效。");
     }
 
+    // ------------------------------------------------------------------ rules
+
+    public bool AskRuleOnInsert
+    {
+        get => Settings.AskRuleOnInsert;
+        set
+        {
+            if (Settings.AskRuleOnInsert == value)
+            {
+                return;
+            }
+
+            _coordinator.SetAskRuleOnInsert(value);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(InsertBehaviorText));
+            ShowToast(value
+                ? Loc.IsEnglish
+                    ? "When a USB drive is inserted, you will choose which rule to sync."
+                    : "插入 U 盘时会先让你选择规则。"
+                : Loc.IsEnglish
+                    ? "Inserted USB drives will sync the last or active rule automatically."
+                    : "插入 U 盘时会自动使用上次或当前规则。");
+        }
+    }
+
+    public string ActiveRuleId => _coordinator.ActiveRule.Id;
+
+    public string ActiveRuleNameText => Loc.RuleName(_coordinator.ActiveRule.Name);
+
+    public string ActiveRuleSummaryText => Loc.IsEnglish
+        ? _coordinator.ActiveRule.Sources.Count == 1
+            ? "1 sync item"
+            : $"{_coordinator.ActiveRule.Sources.Count} sync items"
+        : $"{_coordinator.ActiveRule.Sources.Count} 个同步项";
+
+    public string RuleCountText => Loc.IsEnglish
+        ? Settings.Rules.Count == 1 ? "1 rule" : $"{Settings.Rules.Count} rules"
+        : $"{Settings.Rules.Count} 个规则";
+
+    public string InsertBehaviorText => AskRuleOnInsert
+        ? Loc.IsEnglish ? "Asks when inserted" : "插入时询问"
+        : Loc.IsEnglish ? "Uses the current rule" : "自动使用当前规则";
+
+    public bool HasMultipleRules => Settings.Rules.Count > 1;
+
+    public bool CanDeleteRule => Settings.Rules.Count > 1;
+
+    private void NewRule()
+    {
+        var name = NextRuleName(Loc.IsEnglish ? "New rule" : "新规则");
+        var rule = _coordinator.AddRule(name);
+        RefreshAll();
+        Navigate("rules");
+        Rules.FirstOrDefault(row => row.Id == rule.Id)?.BeginRenameEdit();
+        ShowToast(Loc.IsEnglish
+            ? $"Created rule “{rule.Name}”. Give it a name and add its sync items."
+            : $"已新建规则“{rule.Name}”。给它起个名字，再添加要同步的内容。");
+    }
+
+    private void EditActiveRuleSources()
+    {
+        Navigate("sources");
+        ShowToast(Loc.IsEnglish
+            ? "Editing the sync items of the active rule."
+            : "正在编辑当前规则的同步内容。");
+    }
+
+    internal void ActivateRule(RuleRowViewModel row)
+    {
+        if (!_coordinator.ActivateRule(row.Id))
+        {
+            return;
+        }
+
+        RefreshAll();
+        ShowToast(Loc.IsEnglish
+            ? $"Now using rule “{row.Name}”."
+            : $"已切换到规则“{row.Name}”。");
+    }
+
+    internal void EditRuleSources(RuleRowViewModel row)
+    {
+        _coordinator.ActivateRule(row.Id);
+        RefreshAll();
+        Navigate("sources");
+        ShowToast(Loc.IsEnglish
+            ? $"Editing the sync items of rule “{row.Name}”."
+            : $"正在编辑规则“{row.Name}”的同步内容。");
+    }
+
+    internal bool RenameRule(RuleRowViewModel row, string? name)
+    {
+        var trimmed = name?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+        {
+            ShowToast(Loc.IsEnglish ? "Rule name cannot be empty." : "规则名称不能为空。", true);
+            return false;
+        }
+
+        if (Settings.Rules.Any(rule =>
+                !string.Equals(rule.Id, row.Id, StringComparison.Ordinal)
+                && string.Equals(rule.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            ShowToast(Loc.IsEnglish ? "A rule with this name already exists." : "已经有同名规则了。", true);
+            return false;
+        }
+
+        if (!_coordinator.RenameRule(row.Id, trimmed))
+        {
+            return false;
+        }
+
+        RefreshAll();
+        ShowToast(Loc.IsEnglish
+            ? $"Rule renamed to “{trimmed}”."
+            : $"规则已重命名为“{trimmed}”。");
+        return true;
+    }
+
+    internal void DuplicateRule(RuleRowViewModel row)
+    {
+        var copy = _coordinator.DuplicateRule(
+            row.Id,
+            NextRuleName(row.Name + (Loc.IsEnglish ? " copy" : " 副本")));
+        if (copy is null)
+        {
+            return;
+        }
+
+        RefreshAll();
+        Rules.FirstOrDefault(item => item.Id == copy.Id)?.BeginRenameEdit();
+        ShowToast(Loc.IsEnglish
+            ? $"Duplicated rule “{row.Name}”."
+            : $"已复制规则“{row.Name}”。");
+    }
+
+    internal void DeleteRule(RuleRowViewModel row)
+    {
+        if (Settings.Rules.Count <= 1)
+        {
+            ShowToast(Loc.IsEnglish
+                ? "Keep at least one rule so SyncStick knows what to sync."
+                : "至少要保留一个规则，SyncStick 才知道要同步什么。", true);
+            return;
+        }
+
+        var confirmed = DialogService.Confirm(
+            Loc.T("删除规则？"),
+            Loc.F("“{0}”的同步内容列表会被删除，已经同步的文件不会受影响。", row.Name),
+            Loc.T("删除规则"),
+            danger: true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (_coordinator.DeleteRule(row.Id))
+        {
+            RefreshAll();
+            ShowToast(Loc.IsEnglish
+                ? $"Deleted rule “{row.Name}”."
+                : $"已删除规则“{row.Name}”。");
+        }
+    }
+
+    private string NextRuleName(string baseName)
+    {
+        var name = baseName;
+        var index = 2;
+        while (Settings.Rules.Any(rule =>
+                   string.Equals(rule.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            name = $"{baseName} {index}";
+            index++;
+        }
+
+        return name;
+    }
+
+    private void SyncRuleRows()
+    {
+        var desiredIds = Settings.Rules.Select(rule => rule.Id).ToArray();
+        var existingIds = Rules.Select(row => row.Id).ToArray();
+        if (existingIds.SequenceEqual(desiredIds))
+        {
+            foreach (var row in Rules)
+            {
+                row.RefreshDerived();
+            }
+
+            return;
+        }
+
+        Rules.Clear();
+        foreach (var rule in Settings.Rules)
+        {
+            Rules.Add(new RuleRowViewModel(this, rule));
+        }
+    }
+
+    private void OnRuleSelectionRequested(RuleSelectionRequestedEventArgs args)
+    {
+        try
+        {
+            var owner = Application.Current?.MainWindow;
+            if (owner is not null && !owner.IsVisible)
+            {
+                // The app may be running minimized in the tray.  Bring the window
+                // back so the rule picker has a visible owner to center on.
+                owner.Show();
+                owner.Activate();
+            }
+
+            var dialog = new RulePickerDialog(args.Rules, args.ActiveRuleId, args.LastRuleId);
+            if (owner is not null && owner.IsVisible)
+            {
+                dialog.Owner = owner;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+            else
+            {
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+
+            var accepted = dialog.ShowDialog() == true;
+            if (accepted && dialog.SelectedRuleId is { } ruleId)
+            {
+                _coordinator.CompleteRuleSelection(ruleId);
+                RefreshAll();
+                ShowToast(Loc.IsEnglish
+                    ? "Rule selected. Starting the sync."
+                    : "已选择规则，开始同步。");
+                _ = SyncAfterRuleChoiceAsync(args.Trigger);
+            }
+            else
+            {
+                _coordinator.CancelRuleSelection();
+                ShowToast(Loc.IsEnglish
+                    ? "Skipped this automatic sync. You can still sync from the dashboard."
+                    : "已跳过本次自动同步，仍可在总览手动同步。");
+            }
+        }
+        catch (Exception ex)
+        {
+            _coordinator.CancelRuleSelection();
+            ShowToast("操作失败：" + ex.Message, true);
+        }
+    }
+
+    private async Task SyncAfterRuleChoiceAsync(string trigger)
+    {
+        try
+        {
+            await _coordinator.SyncNowAsync(trigger);
+        }
+        catch (Exception ex)
+        {
+            ShowToast("同步失败：" + ex.Message, true);
+        }
+    }
+
     private static void ShowStartupRestrictionHelp(Exception error)
     {
         var programFolder = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -1062,7 +1340,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        if (page is not ("dashboard" or "sources" or "devices" or "activity" or "settings"))
+        if (page is not ("dashboard" or "rules" or "sources" or "devices" or "activity" or "settings"))
         {
             return;
         }
@@ -1348,6 +1626,7 @@ public sealed class MainViewModel : ObservableObject
     private void RefreshAll()
     {
         SyncSourceRows();
+        SyncRuleRows();
         RebuildDeviceRows();
         RebuildActivities();
         UpdateNavBadges();

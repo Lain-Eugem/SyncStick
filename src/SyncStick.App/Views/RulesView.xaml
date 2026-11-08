@@ -1,0 +1,267 @@
+<UserControl x:Class="SyncStick.App.Views.RulesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DesignHeight="900"
+             d:DesignWidth="1100"
+             mc:Ignorable="d">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <Grid MaxWidth="1080"
+              Margin="32,24,30,30"
+              HorizontalAlignment="Center">
+            <StackPanel>
+                <!-- ============================================= header -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Overline}" Text="RULES / 规则" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource Text.Display}"
+                                   Text="为每块 U 盘准备一套规则" />
+                        <TextBlock MaxWidth="620"
+                                   Margin="0,7,0,0"
+                                   Style="{StaticResource Text.Body}"
+                                   Text="提前写好要同步的文件和它们的目标位置。插入 U 盘后，可以直接选择要用哪一套规则。"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Margin="24,0,0,0"
+                                VerticalAlignment="Bottom"
+                                Orientation="Horizontal">
+                        <Button Command="{Binding EditActiveRuleSourcesCommand}" Style="{StaticResource SecondaryButton}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="15"
+                                      Height="15"
+                                      Data="{StaticResource Icon.Folder}"
+                                      Stroke="{StaticResource InkSoftBrush}"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round"
+                                      StrokeThickness="1.5"
+                                      Stretch="Uniform" />
+                                <TextBlock Margin="7,0,0,0" Text="编辑当前规则" />
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="10,0,0,0"
+                                Command="{Binding NewRuleCommand}"
+                                Style="{StaticResource PrimaryButton}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="15"
+                                      Height="15"
+                                      Data="{StaticResource Icon.Plus}"
+                                      Stroke="#FFF9F2"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round"
+                                      StrokeThickness="1.6"
+                                      Stretch="Uniform" />
+                                <TextBlock Margin="7,0,0,0" Foreground="#FFF9F2" Text="新建规则" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============================================= info -->
+                <Border Margin="0,20,0,0"
+                        Padding="15,13"
+                        Background="{StaticResource SurfaceBrush}"
+                        BorderBrush="{StaticResource LineBrush}"
+                        BorderThickness="1"
+                        CornerRadius="13">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="30"
+                                Height="30"
+                                VerticalAlignment="Top"
+                                Background="{StaticResource AccentSoftBrush}"
+                                CornerRadius="9">
+                            <Path Width="15"
+                                  Height="15"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Data="{StaticResource Icon.Shield}"
+                                  Stroke="{StaticResource AccentDeepBrush}"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round"
+                                  StrokeThickness="1.6"
+                                  Stretch="Uniform" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   Margin="10,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11.5"
+                                   Foreground="{StaticResource InkSoftBrush}"
+                                   LineHeight="18"
+                                   Text="每个规则都有自己的同步内容列表。切换规则只改变下一次写什么，不会移动或删除任何文件。"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
+                <!-- ============================================= rule list -->
+                <Grid Margin="0,22,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Text.H3}" Text="规则列表" />
+                        <TextBlock Margin="10,3,0,0"
+                                   Style="{StaticResource Text.Overline}"
+                                   Text="{Binding RuleCountText}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource Font.Mono}"
+                               FontSize="9.5"
+                               Foreground="{StaticResource InkFaintBrush}"
+                               Text="{Binding InsertBehaviorText}" />
+                </Grid>
+
+                <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Rules}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,12"
+                                    Padding="18,15"
+                                    Style="{StaticResource CardBorder}">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Orientation="Horizontal">
+                                            <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock VerticalAlignment="Center"
+                                                               FontSize="15"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Name}" />
+                                                    <Border Margin="9,0,0,0"
+                                                            Padding="7,2"
+                                                            VerticalAlignment="Center"
+                                                            Background="{StaticResource SuccessSoftBrush}"
+                                                            CornerRadius="8"
+                                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}">
+                                                        <TextBlock FontFamily="{StaticResource Font.Mono}"
+                                                                   FontSize="8.5"
+                                                                   Foreground="{StaticResource SuccessBrush}"
+                                                                   Text="{Binding ActiveBadgeText}" />
+                                                    </Border>
+                                                    <TextBlock Margin="10,0,0,0"
+                                                               VerticalAlignment="Center"
+                                                               FontFamily="{StaticResource Font.Mono}"
+                                                               FontSize="9.5"
+                                                               Foreground="{StaticResource InkFaintBrush}"
+                                                               Text="{Binding SourceCountText}" />
+                                                </StackPanel>
+                                                <TextBlock Margin="0,5,0,0"
+                                                           MaxWidth="720"
+                                                           FontSize="10.5"
+                                                           Foreground="{StaticResource InkSoftBrush}"
+                                                           Text="{Binding SourcesSummary}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+
+                                            <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                                                <TextBox Width="360"
+                                                         HorizontalAlignment="Left"
+                                                         Style="{StaticResource FieldTextBox}"
+                                                         Text="{Binding DraftName, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Margin="0,5,0,0"
+                                                           FontSize="10.5"
+                                                           Foreground="{StaticResource InkFaintBrush}"
+                                                           Text="输入新的规则名称，按保存后生效。" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1"
+                                                    Margin="16,0,0,0"
+                                                    VerticalAlignment="Top"
+                                                    Orientation="Horizontal"
+                                                    Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
+                                            <Button MinWidth="96"
+                                                    Command="{Binding ActivateCommand}"
+                                                    Content="使用此规则"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Visibility="{Binding IsActive, Converter={StaticResource InverseBoolToVis}}" />
+                                            <Button Margin="8,0,0,0"
+                                                    Command="{Binding EditSourcesCommand}"
+                                                    Content="编辑内容"
+                                                    Style="{StaticResource GhostButton}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid Margin="0,13,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
+                                            <TextBlock VerticalAlignment="Center"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource InkFaintBrush}"
+                                                       Text="{Binding EnabledCountText}" />
+                                            <Button Margin="14,0,0,0"
+                                                    Command="{Binding RenameCommand}"
+                                                    Content="重命名"
+                                                    Style="{StaticResource GhostButton}" />
+                                            <Button Margin="6,0,0,0"
+                                                    Command="{Binding DuplicateCommand}"
+                                                    Content="复制"
+                                                    Style="{StaticResource GhostButton}" />
+                                            <Button Margin="6,0,0,0"
+                                                    Command="{Binding DeleteCommand}"
+                                                    Content="删除"
+                                                    Foreground="{StaticResource DangerBrush}"
+                                                    Style="{StaticResource GhostButton}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1"
+                                                    HorizontalAlignment="Right"
+                                                    Orientation="Horizontal"
+                                                    Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                                            <Button MinWidth="82"
+                                                    Command="{Binding CancelRenameCommand}"
+                                                    Content="取消"
+                                                    Style="{StaticResource SecondaryButton}" />
+                                            <Button Margin="8,0,0,0"
+                                                    MinWidth="82"
+                                                    Command="{Binding CommitRenameCommand}"
+                                                    Content="保存"
+                                                    Style="{StaticResource PrimaryButton}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ============================================= bottom hint -->
+                <Border Margin="0,4,0,0"
+                        Padding="14,12"
+                        Background="{StaticResource SurfaceHoverBrush}"
+                        CornerRadius="12">
+                    <TextBlock FontSize="10.5"
+                               Foreground="{StaticResource InkSoftBrush}"
+                               LineHeight="18"
+                               Text="只有一个规则时，插入目标 U 盘会自动同步。有多个规则时，可以在“设置”里选择插入时是否询问。也可以随时在“目标设备”页手动同步当前规则。"
+                               TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

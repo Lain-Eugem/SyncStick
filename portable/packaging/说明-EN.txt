@@ -1,4 +1,4 @@
-SyncStick Portable 1.0.2
+SyncStick Portable 1.1.0
 ========================
 
 Carry the files you need and keep working on another PC.
@@ -16,6 +16,13 @@ Where rules are stored
 All rules live in SyncStickPortable.ini next to SyncStickPortable.exe, so they travel with the USB drive.
 Each PC has its own rule set, identified automatically. Changing the USB port or drive letter does not lose the rules.
 The sync log is written to SyncStickPortable.log.
+
+Multiple rule sets
+------------------
+You can save rules as named sets, for example "Work files" and "Home backup".
+Click "Rule sets" at the top, or press Ctrl+R, to create, rename, delete, or switch sets.
+If two or more sets exist, the app asks which one to use before syncing at startup; each PC remembers its last choice.
+The active set is shown under the app title. Switching sets only changes what gets written next; no files are moved or deleted.
 
 How sync decisions are made
 ---------------------------

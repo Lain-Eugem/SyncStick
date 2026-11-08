@@ -154,6 +154,33 @@
                                            TextTrimming="CharacterEllipsis"
                                            TextWrapping="Wrap" />
 
+                                <Border Margin="0,12,0,0"
+                                        Padding="9,4"
+                                        HorizontalAlignment="Left"
+                                        Background="#16FFFFFF"
+                                        BorderBrush="#26FFFFFF"
+                                        BorderThickness="1"
+                                        CornerRadius="12">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource Font.Mono}"
+                                                   FontSize="9"
+                                                   Foreground="#7F8E82"
+                                                   Text="RULE" />
+                                        <TextBlock Margin="8,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="11.5"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource CreamBrush}"
+                                                   Text="{Binding ActiveRuleNameText}" />
+                                        <TextBlock Margin="7,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="10"
+                                                   Foreground="#7F8E82"
+                                                   Text="{Binding ActiveRuleSummaryText}" />
+                                    </StackPanel>
+                                </Border>
+
                                 <StackPanel Margin="0,16,0,0"
                                             MaxWidth="520"
                                             HorizontalAlignment="Left"

@@ -20,6 +20,12 @@ public sealed class DeviceIdentity
     /// <summary>Last drive letter seen, useful for display only.</summary>
     public string? LastDriveLetter { get; set; }
 
+    /// <summary>
+    /// Rule set used last time with this device. Remembered per device so the
+    /// rule picker can preselect it when the drive is inserted again.
+    /// </summary>
+    public string? LastRuleId { get; set; }
+
     [JsonIgnore]
     public string DisplayLabel => string.IsNullOrWhiteSpace(Label) ? "未命名设备" : Label;
 

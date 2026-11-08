@@ -385,6 +385,7 @@
                     </Grid.RenderTransform>
 
                     <views:DashboardView x:Name="DashboardPage" Visibility="{Binding IsDashboardPage, Converter={StaticResource BoolToVis}}" />
+                    <views:RulesView x:Name="RulesPage" Visibility="{Binding IsRulesPage, Converter={StaticResource BoolToVis}}" />
                     <views:SourcesView x:Name="SourcesPage" Visibility="{Binding IsSourcesPage, Converter={StaticResource BoolToVis}}" />
                     <views:DevicesView x:Name="DevicesPage" Visibility="{Binding IsDevicesPage, Converter={StaticResource BoolToVis}}" />
                     <views:ActivityView x:Name="ActivityPage" Visibility="{Binding IsActivityPage, Converter={StaticResource BoolToVis}}" />

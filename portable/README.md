@@ -4,6 +4,8 @@
 
 ![SyncStick Portable 主界面](docs/screenshots/portable-main.png)
 
+![便携版多套规则集](docs/screenshots/portable-rulesets-main.png)
+
 ## 和桌面版的区别
 
 | | 桌面版 SyncStick | 便携版 SyncStick Portable |
@@ -11,7 +13,7 @@
 | 运行位置 | 装在本机，后台常驻 | 放在 U 盘，双击一次运行 |
 | 自动触发 | 插入 U 盘时自动写入 | 受 Windows 限制，需双击一次 |
 | 目标电脑 | 本机 | 任何插上这支 U 盘的 Windows 电脑 |
-| 规则存储 | 本机 | U 盘里的 `SyncStickPortable.ini`，按电脑区分 |
+| 规则存储 | 本机 | U 盘里的 `SyncStickPortable.ini`，多套规则集共用；每台电脑记住上次选择 |
 | 是否清空 U 盘 | 可开启镜像清理 | 不删除文件 |
 
 Windows 10/11 禁止 U 盘里的 EXE 静默自启，`autorun.inf` 只能设置图标和卷标，不能绕过这条限制；真正“插入即写入”请用桌面版。
@@ -30,6 +32,7 @@ Windows 10/11 禁止 U 盘里的 EXE 静默自启，`autorun.inf` 只能设置�
 ## 已实现
 
 - 每台电脑独立规则：用 `MachineGuid` 生成稳定电脑 ID，规则存在 U 盘里；换 USB 口、换盘符都不会丢。
+- 多套命名规则集：顶部“规则集”按钮或 Ctrl+R 新建、重命名、删除、切换；启动时若有多套会先选择，每台电脑记住上次选择。
 - 文件夹与单文件两种同步项。
 - 双向同步（默认）、仅电脑 → U 盘、仅 U 盘 → 电脑。
 - 双向模式下比较两边修改时间；较新一边覆盖较旧一边；两边 mtime 相差 3 秒内视为冲突并跳过，不冒险覆盖。

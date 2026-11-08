@@ -1,4 +1,4 @@
-SyncStick 1.0.4 · Automatic USB sync
+﻿SyncStick 1.1.0 · Automatic USB sync
 ====================================
 
 1. Run
@@ -21,7 +21,27 @@ The app is not code-signed; this is the usual prompt for an unknown publisher.
 3. Return to "Dashboard". With "Auto sync" enabled, every future insert of
    this USB drive will compare both sides and write changed files.
 
-3. Overwrite and destination
+3. Rule sets (multiple sync layouts)
+------------------------------------
+You can save different sync layouts as named rule sets. Each rule set has
+its own list of sync items and "USB destination", for example "Work documents"
+and "Project archive".
+- Open "Rules", click "New rule", then click "Edit items" to add that set.
+- Each rule card supports "Rename / Duplicate / Delete / Use this rule".
+- The active rule is shown at the top of Dashboard and Sources.
+- With a single rule, inserting the target USB drive syncs automatically.
+- With several rules, SyncStick asks which rule to use after the drive is
+  inserted by default, then syncs the one you pick. Each device remembers
+  the last rule used with it.
+- To skip the question, turn off "Ask which rule on insert" in
+  "Settings > Automation & startup". The last rule used with that device is
+  used instead (or the active rule if there is none).
+- "Sync now" on the Devices page uses the active rule.
+Switching rules only changes what gets written next; files already synced are
+never moved or deleted. Settings from older versions migrate into a single
+"Default rule" without losing existing sync items.
+
+4. Overwrite and destination
 ----------------------------
 The default is "Smart overwrite": only new or changed files are written,
 and same-name files on the USB drive are overwritten. Directories you did
@@ -34,7 +54,7 @@ Each sync item has its own "USB destination":
   You can create a new folder in the picker if needed.
 Before enabling mirror clean, verify the "USB destination" of every item.
 
-4. Exit and startup
+5. Exit and startup
 -------------------
 Closing the window minimizes it to the notification area by default; the app
 keeps listening. Right-click the tray icon to open, sync now, or exit.
@@ -51,7 +71,7 @@ it falls back to a shortcut in the Startup folder. If both fail, the app explain
 how to relaunch SyncStick.exe from File Explorer and retry. Programs launched by
 a sandbox or with restricted permissions are not allowed to write startup entries.
 
-5. Interface language
+6. Interface language
 ---------------------
 SyncStick supports Simplified Chinese and English.
 Open Settings and use the "Interface language / LANGUAGE" card to choose
@@ -61,7 +81,7 @@ other systems show English. You can also pass --lang zh or --lang en on the
 command line to override the language for that run. Changing the language
 never changes sync rules, paths, or activity history.
 
-6. Data locations
+7. Data locations
 -----------------
 %APPDATA%\SyncStick\settings.json   configuration
 %APPDATA%\SyncStick\activity.json   last 60 sync records

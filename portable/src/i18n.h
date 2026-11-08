@@ -222,6 +222,24 @@ inline const std::unordered_map<std::wstring, const wchar_t*>& Dictionary() {
         {L"同步完成，写入 %s 个文件", L"Sync complete; %s file(s) written"},
         {L"，跳过 %s 个未变化文件", L", skipped %s unchanged file(s)"},
         {L"，保留 %s 处冲突", L", kept %s conflict(s)"},
+        {L"规则集", L"Rule sets"},
+        {L"规则集 · %s", L"Rule set · %s"},
+        {L"选择规则集", L"Choose a rule set"},
+        {L"这台电脑启动时使用哪一套规则", L"Which rule set this PC uses on startup"},
+        {L"使用", L"Use"},
+        {L"新建", L"New"},
+        {L"重命名", L"Rename"},
+        {L"删除", L"Delete"},
+        {L"新建规则集", L"New rule set"},
+        {L"重命名规则集", L"Rename rule set"},
+        {L"删除规则集「%s」吗？\n其中的规则也会一起删除；U 盘里的文件不会被删除。", L"Delete rule set “%s”?\nIts rules will be removed too; files on the USB drive are not deleted"},
+        {L"删除规则集", L"Delete rule set"},
+        {L"规则集名称不能为空", L"A rule set name is required"},
+        {L"已经有同名的规则集了", L"A rule set with that name already exists"},
+        {L"至少需要保留一个规则集", L"Keep at least one rule set"},
+        {L"默认规则", L"Default rules"},
+        {L"新建的规则集", L"New rule set"},
+        {L"确定", L"OK"},
     };
     return dictionary;
 }
@@ -341,6 +359,11 @@ inline std::wstring CountText(int count, const wchar_t* chineseFormat,
 // Name used when a rule has no name at all (never a translated heading).
 inline std::wstring DefaultRuleNameText() {
     return IsEnglish() ? L"Sync item" : L"同步项";
+}
+
+// Name used when a rule set has no name at all (never a translated heading).
+inline std::wstring DefaultRuleSetNameText() {
+    return IsEnglish() ? L"Default rules" : L"默认规则";
 }
 
 namespace i18n_detail {

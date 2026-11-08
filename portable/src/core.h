@@ -23,20 +23,39 @@ struct Rule {
     bool enabled = true;
 };
 
-struct DeviceRules {
+// A named set of sync rules.  Rule sets live on the USB drive, not per PC, so
+// the same rules can be reused on any computer.  A device remembers which set
+// it used last in DeviceRules::lastRuleSetId.
+struct RuleSet {
     std::wstring id;
     std::wstring name;
     std::vector<Rule> rules;
 };
 
-struct AppConfig {
-    std::vector<DeviceRules> devices;
-    std::wstring language;  // L"zh", L"en", or empty when the language is not pinned yet
+struct DeviceRules {
+    std::wstring id;
+    std::wstring name;
+    std::wstring lastRuleSetId;  // rule set this PC used last (empty before first choice)
+    std::vector<Rule> rules;     // legacy per-device rules; only populated when loading an
+                                 // old config file, moved into a rule set by LoadConfig
+};
 
+struct AppConfig {
+    std::vector<RuleSet> ruleSets;
+    std::vector<DeviceRules> devices;
+    std::wstring activeRuleSetId;  // fallback set when a device has no lastRuleSetId
+    std::wstring language;         // L"zh", L"en", or empty when the language is not pinned yet
+
+    RuleSet* FindRuleSet(const std::wstring& id);
+    const RuleSet* FindRuleSet(const std::wstring& id) const;
+    RuleSet& FindOrCreateRuleSet(const std::wstring& id, const std::wstring& name);
     DeviceRules* FindDevice(const std::wstring& id);
     const DeviceRules* FindDevice(const std::wstring& id) const;
     DeviceRules& FindOrCreateDevice(const std::wstring& id, const std::wstring& name);
 };
+
+// A rule set id that is not used yet ("rs1", "rs2", ...).
+std::wstring NewRuleSetId(const AppConfig& config);
 
 struct DeviceIdentity {
     std::wstring id;

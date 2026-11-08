@@ -627,6 +627,47 @@ DeviceRules& AppConfig::FindOrCreateDevice(const std::wstring& id, const std::ws
     return devices.back();
 }
 
+RuleSet* AppConfig::FindRuleSet(const std::wstring& id) {
+    for (auto& ruleSet : ruleSets) {
+        if (_wcsicmp(ruleSet.id.c_str(), id.c_str()) == 0) {
+            return &ruleSet;
+        }
+    }
+    return nullptr;
+}
+
+const RuleSet* AppConfig::FindRuleSet(const std::wstring& id) const {
+    for (const auto& ruleSet : ruleSets) {
+        if (_wcsicmp(ruleSet.id.c_str(), id.c_str()) == 0) {
+            return &ruleSet;
+        }
+    }
+    return nullptr;
+}
+
+RuleSet& AppConfig::FindOrCreateRuleSet(const std::wstring& id, const std::wstring& name) {
+    if (RuleSet* ruleSet = FindRuleSet(id)) {
+        if (!name.empty()) {
+            ruleSet->name = name;
+        }
+        return *ruleSet;
+    }
+    RuleSet ruleSet;
+    ruleSet.id = id;
+    ruleSet.name = name;
+    ruleSets.push_back(std::move(ruleSet));
+    return ruleSets.back();
+}
+
+std::wstring NewRuleSetId(const AppConfig& config) {
+    for (int number = 1;; ++number) {
+        std::wstring candidate = L"rs" + std::to_wstring(number);
+        if (config.FindRuleSet(candidate) == nullptr) {
+            return candidate;
+        }
+    }
+}
+
 std::wstring ReadMachineGuid() {
     HKEY key = nullptr;
     const wchar_t* subkey = L"SOFTWARE\\Microsoft\\Cryptography";
@@ -774,6 +815,7 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
     std::wstring line;
     std::wstring currentDeviceId;
     DeviceRules* currentDevice = nullptr;
+    RuleSet* currentRuleSet = nullptr;
     Rule* currentRule = nullptr;
 
     auto flushRule = [&]() {
@@ -793,6 +835,14 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
             currentRule->mode = L"both";
         }
         currentRule = nullptr;
+    };
+
+    auto beginRule = [&](std::vector<Rule>& rules) {
+        Rule rule;
+        rule.kind = L"folder";
+        rule.mode = L"both";
+        rules.push_back(std::move(rule));
+        return &rules.back();
     };
 
     size_t start = 0;
@@ -819,36 +869,58 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
                 continue;
             }
             std::wstring section = Trim(trimmed.substr(1, close - 1));
+            currentRule = nullptr;
             if (StartsWithI(section, L"device.")) {
-                currentDeviceId = Trim(section.substr(7));
-                if (currentDeviceId.empty()) {
+                std::wstring deviceId = Trim(section.substr(7));
+                currentRuleSet = nullptr;
+                if (deviceId.empty()) {
                     currentDevice = nullptr;
                     continue;
                 }
-                currentDevice = &config.FindOrCreateDevice(currentDeviceId, L"");
-                currentRule = nullptr;
+                currentDeviceId = deviceId;
+                currentDevice = &config.FindOrCreateDevice(deviceId, L"");
+            } else if (StartsWithI(section, L"ruleset.")) {
+                std::wstring rest = Trim(section.substr(8));
+                size_t lastDot = rest.find_last_of(L'.');
+                currentDevice = nullptr;
+                if (rest.empty()) {
+                    currentRuleSet = nullptr;
+                    continue;
+                }
+                if (lastDot == std::wstring::npos) {
+                    // "[ruleset.<id>]" - the header of one named rule set.
+                    currentRuleSet = &config.FindOrCreateRuleSet(rest, L"");
+                } else {
+                    // "[ruleset.<id>.<n>]" - one rule inside that set.
+                    std::wstring setId = Trim(rest.substr(0, lastDot));
+                    std::wstring indexText = Trim(rest.substr(lastDot + 1));
+                    if (setId.empty() || indexText.empty()) {
+                        currentRuleSet = nullptr;
+                        continue;
+                    }
+                    currentRuleSet = &config.FindOrCreateRuleSet(setId, L"");
+                    currentRule = beginRule(currentRuleSet->rules);
+                }
             } else if (StartsWithI(section, L"rule.")) {
+                // Old per-device sections, migrated to rule sets below.
                 std::wstring rest = Trim(section.substr(5));
+                currentRuleSet = nullptr;
                 size_t lastDot = rest.find_last_of(L'.');
                 if (lastDot == std::wstring::npos) {
-                    currentRule = nullptr;
+                    currentDevice = nullptr;
                     continue;
                 }
                 std::wstring deviceId = Trim(rest.substr(0, lastDot));
                 std::wstring indexText = Trim(rest.substr(lastDot + 1));
                 if (deviceId.empty() || indexText.empty()) {
-                    currentRule = nullptr;
+                    currentDevice = nullptr;
                     continue;
                 }
                 currentDeviceId = deviceId;
                 currentDevice = &config.FindOrCreateDevice(deviceId, L"");
-                Rule rule;
-                rule.kind = L"folder";
-                rule.mode = L"both";
-                currentDevice->rules.push_back(std::move(rule));
-                currentRule = &currentDevice->rules.back();
+                currentRule = beginRule(currentDevice->rules);
             } else {
-                currentRule = nullptr;
+                currentRuleSet = nullptr;
                 currentDevice = nullptr;
             }
             continue;
@@ -860,6 +932,22 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
         }
         std::wstring key = ToLower(Trim(trimmed.substr(0, equals)));
         std::wstring value = Trim(trimmed.substr(equals + 1));
+
+        // File-level settings may legally appear before or after section
+        // headers.  Handle them first so a preceding [device.*] block cannot
+        // swallow them.
+        if (key == L"language") {
+            std::wstring tag;
+            if (ParseLanguageTag(value, tag)) {
+                config.language = tag;
+            }
+            continue;
+        }
+        if (key == L"activeruleset") {
+            config.activeRuleSetId = value;
+            continue;
+        }
+
         if (currentRule != nullptr) {
             if (key == L"name") {
                 currentRule->name = value;
@@ -879,27 +967,57 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
             } else if (key == L"enabled") {
                 currentRule->enabled = !(value == L"0" || _wcsicmp(value.c_str(), L"false") == 0);
             }
-        } else if (currentDevice == nullptr && key == L"language") {
-            std::wstring tag;
-            if (ParseLanguageTag(value, tag)) {
-                config.language = tag;
+        } else if (currentRuleSet != nullptr) {
+            if (key == L"name") {
+                currentRuleSet->name = value;
             }
-        } else if (currentDevice != nullptr && key == L"name") {
-            currentDevice->name = value;
+        } else if (currentDevice != nullptr) {
+            if (key == L"name") {
+                currentDevice->name = value;
+            } else if (key == L"lastrule") {
+                currentDevice->lastRuleSetId = value;
+            }
         }
     }
     flushRule();
+
+    // Old configs keep their rules per device.  Move each device's rules into a
+    // named rule set so nothing is lost; the device remembers that set.
+    for (auto& device : config.devices) {
+        if (device.rules.empty()) {
+            continue;
+        }
+        RuleSet ruleSet;
+        ruleSet.id = NewRuleSetId(config);
+        ruleSet.name = device.name.empty() ? DefaultRuleSetNameText() : device.name;
+        ruleSet.rules = std::move(device.rules);
+        device.rules.clear();
+        if (device.lastRuleSetId.empty()) {
+            device.lastRuleSetId = ruleSet.id;
+        }
+        config.ruleSets.push_back(std::move(ruleSet));
+    }
 
     for (auto& device : config.devices) {
         if (device.name.empty()) {
             device.name = device.id;
         }
-        for (auto& rule : device.rules) {
-            if (rule.pcPath.empty() || rule.usbPath.empty()) {
-                if (rule.pcPath.empty()) {
-                    rule.pcPath = NormalizePath(rule.pcPath);
-                }
-            }
+    }
+    if (config.FindRuleSet(config.activeRuleSetId) == nullptr) {
+        config.activeRuleSetId.clear();
+    }
+    if (config.activeRuleSetId.empty() && !config.ruleSets.empty()) {
+        DeviceIdentity identity = GetCurrentDevice();
+        const DeviceRules* device = config.FindDevice(identity.id);
+        if (device != nullptr && config.FindRuleSet(device->lastRuleSetId) != nullptr) {
+            config.activeRuleSetId = device->lastRuleSetId;
+        } else {
+            config.activeRuleSetId = config.ruleSets.front().id;
+        }
+    }
+    for (auto& device : config.devices) {
+        if (config.FindRuleSet(device.lastRuleSetId) == nullptr) {
+            device.lastRuleSetId = config.activeRuleSetId;
         }
     }
     return true;
@@ -909,7 +1027,7 @@ std::wstring ReadStoredLanguage(const std::wstring& path) {
     AppConfig config;
     std::wstring error;
     if (!LoadConfig(path, config, error)) {
-        return {};
+        return std::wstring();
     }
     return config.language;
 }
@@ -919,15 +1037,22 @@ bool SaveConfig(const std::wstring& path, const AppConfig& config, std::wstring&
     std::wstring appDir = GetAppDirectory();
     std::wstringstream out;
     out << L"# SyncStick Portable\r\n";
-    out << L"# 规则按电脑保存；U 盘路径相对当前程序目录时，换盘符也不会失效。\r\n";
-    out << L"# Rules are stored per PC; USB paths stay relative to this folder when possible.\r\n";
-    out << L"language=" << config.language << L"\r\n\r\n";
+    out << L"# 规则集保存在 U 盘上；U 盘路径相对当前程序目录时，换盘符也不会失效。\r\n";
+    out << L"# Rule sets are stored on the USB drive; USB paths stay relative to this folder "
+           L"when possible.\r\n";
+    out << L"language=" << config.language << L"\r\n";
+    out << L"activeRuleset=" << config.activeRuleSetId << L"\r\n\r\n";
     for (const auto& device : config.devices) {
         out << L"[device." << device.id << L"]\r\n";
-        out << L"name=" << device.name << L"\r\n\r\n";
+        out << L"name=" << device.name << L"\r\n";
+        out << L"lastRule=" << device.lastRuleSetId << L"\r\n\r\n";
+    }
+    for (const auto& ruleSet : config.ruleSets) {
+        out << L"[ruleset." << ruleSet.id << L"]\r\n";
+        out << L"name=" << ruleSet.name << L"\r\n\r\n";
         int index = 1;
-        for (const auto& rule : device.rules) {
-            out << L"[rule." << device.id << L"." << index++ << L"]\r\n";
+        for (const auto& rule : ruleSet.rules) {
+            out << L"[ruleset." << ruleSet.id << L"." << index++ << L"]\r\n";
             out << L"name=" << rule.name << L"\r\n";
             out << L"pc=" << NormalizePath(rule.pcPath) << L"\r\n";
             out << L"usb=" << MakePortablePath(rule.usbPath, appDir) << L"\r\n";

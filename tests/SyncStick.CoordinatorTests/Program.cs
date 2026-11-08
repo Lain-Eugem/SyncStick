@@ -19,7 +19,10 @@ internal static class Program
         await Run("different serial never uses label fallback", DifferentSerialDoesNotFallback);
         await Run("device fallback match", DeviceFallbackMatch);
         await Run("ambiguous fallback match", AmbiguousFallbackMatch);
+        await Run("legacy settings migrate to a default rule", LegacySettingsMigrateToDefaultRule);
         await Run("auto sync after simulated insertion", AutoSyncAfterInsertion);
+        await Run("multiple rules prompt before auto sync", MultipleRulesPromptOnInsert);
+        await Run("multiple rules use the last rule when not asking", MultipleRulesUseLastRuleWhenNotAsking);
         await Run("auto sync respects paused setting", AutoSyncPaused);
         await Run("missing source records a failure", MissingSourceRecordsFailure);
 
@@ -211,6 +214,183 @@ internal static class Program
         Assert(match.Device is null, "two identical fallback candidates must be ambiguous");
         Assert(match.IsAmbiguous && match.AmbiguousCandidates.Count == 2, "expected both candidates");
         return Task.CompletedTask;
+    }
+
+    private static Task LegacySettingsMigrateToDefaultRule()
+    {
+        var root = NewTempDirectory("rule-migration");
+        try
+        {
+            var settingsPath = Path.Combine(root, "settings.json");
+            File.WriteAllText(settingsPath, """
+            {
+              "schemaVersion": 1,
+              "sources": [
+                { "id": "abc123", "path": "C:\\data", "isFolder": true, "destinationSubfolder": "Backup", "enabled": true }
+              ],
+              "autoSyncEnabled": true,
+              "notifyOnComplete": true,
+              "minimizeToTray": true,
+              "startWithWindows": false,
+              "autoSyncOnLaunch": false,
+              "sync": { "smartOverwrite": true, "mirrorDelete": false, "ignoreSystemFiles": true, "copyTimestamps": false },
+              "uiLanguage": "system"
+            }
+            """);
+
+            var settings = new SettingsStore(settingsPath).Load();
+            Assert(settings.Rules.Count == 1, $"expected one migrated rule, got {settings.Rules.Count}");
+            var rule = settings.Rules[0];
+            Assert(rule.Name == SyncRule.DefaultName, $"unexpected rule name: {rule.Name}");
+            Assert(rule.Sources.Count == 1, "migrated rule should keep the source list");
+            Assert(rule.Sources[0].Path == @"C:\data", "source path changed during migration");
+            Assert(rule.Sources[0].DestinationSubfolder == "Backup", "destination changed during migration");
+            Assert(settings.ActiveRuleId == rule.Id, "active rule should point at the migrated rule");
+            Assert(settings.Sources.Count == 1 && settings.Sources[0].Path == @"C:\data",
+                "top-level sources should mirror the active rule");
+        }
+        finally
+        {
+            DeleteTree(root);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task MultipleRulesPromptOnInsert()
+    {
+        var root = NewTempDirectory("rule-prompt");
+        var sourceA = Path.Combine(root, "Alpha");
+        var sourceB = Path.Combine(root, "Beta");
+        var target = Path.Combine(root, "usb");
+        Directory.CreateDirectory(sourceA);
+        Directory.CreateDirectory(sourceB);
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(sourceA, "alpha.txt"), "alpha");
+        File.WriteAllText(Path.Combine(sourceB, "beta.txt"), "beta");
+
+        var volume = CreateVolume(target, "TESTUSB", "CAFEABCD");
+        var settings = new AppSettings
+        {
+            AutoSyncEnabled = true,
+            AskRuleOnInsert = true,
+            TargetDevice = DeviceMatcher.CreateIdentity(volume)
+        };
+        var ruleA = new SyncRule { Name = "Alpha" };
+        ruleA.Sources.Add(new SourceItem { Path = sourceA, IsFolder = true, DestinationSubfolder = "Alpha" });
+        var ruleB = new SyncRule { Name = "Beta" };
+        ruleB.Sources.Add(new SourceItem { Path = sourceB, IsFolder = true, DestinationSubfolder = "Beta" });
+        settings.Rules.Add(ruleA);
+        settings.Rules.Add(ruleB);
+        settings.ActiveRuleId = ruleA.Id;
+
+        var settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
+        settingsStore.Save(settings);
+        var fake = new FakeDeviceService();
+        using var coordinator = new SyncCoordinator(settingsStore, new ActivityStore(Path.Combine(root, "activity.json")), fake);
+
+        var requested = new TaskCompletionSource<RuleSelectionRequestedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.RuleSelectionRequested += (_, args) => requested.TrySetResult(args);
+
+        try
+        {
+            coordinator.Start();
+            await Task.Delay(250);
+            fake.SetVolumes(volume);
+
+            var args = await requested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert(args.Rules.Count == 2, $"expected two rules in the prompt, got {args.Rules.Count}");
+            Assert(args.ActiveRuleId == ruleA.Id, "prompt should carry the active rule");
+            Assert(args.LastRuleId is null, $"no last rule expected, got {args.LastRuleId}");
+            Assert(args.Trigger == "插入 U 盘", $"unexpected trigger: {args.Trigger}");
+            Assert(coordinator.IsRuleSelectionPending, "coordinator should wait for a rule choice");
+
+            await Task.Delay(3000);
+            Assert(!File.Exists(Path.Combine(target, "Alpha", "alpha.txt")), "nothing should sync before choosing a rule");
+            Assert(!File.Exists(Path.Combine(target, "Beta", "beta.txt")), "nothing should sync before choosing a rule");
+
+            coordinator.CompleteRuleSelection(ruleB.Id);
+            Assert(!coordinator.IsRuleSelectionPending, "pending state should clear after the choice");
+            Assert(coordinator.ActiveRule?.Id == ruleB.Id, "chosen rule should become active");
+            Assert(coordinator.Settings.TargetDevice?.LastRuleId == ruleB.Id,
+                "chosen rule should be remembered for the device");
+
+            var record = await coordinator.SyncNowAsync("插入 U 盘");
+            Assert(record?.Success == true, "manual sync after the choice should succeed");
+            Assert(File.Exists(Path.Combine(target, "Beta", "beta.txt")), "chosen rule should write its file");
+            Assert(!File.Exists(Path.Combine(target, "Alpha", "alpha.txt")), "other rules must not write");
+        }
+        finally
+        {
+            coordinator.Dispose();
+            DeleteTree(root);
+        }
+    }
+
+    private static async Task MultipleRulesUseLastRuleWhenNotAsking()
+    {
+        var root = NewTempDirectory("rule-last");
+        var sourceA = Path.Combine(root, "Alpha");
+        var sourceB = Path.Combine(root, "Beta");
+        var target = Path.Combine(root, "usb");
+        Directory.CreateDirectory(sourceA);
+        Directory.CreateDirectory(sourceB);
+        Directory.CreateDirectory(target);
+        File.WriteAllText(Path.Combine(sourceA, "alpha.txt"), "alpha");
+        File.WriteAllText(Path.Combine(sourceB, "beta.txt"), "beta");
+
+        var volume = CreateVolume(target, "TESTUSB", "CAFEBEEF");
+        var settings = new AppSettings
+        {
+            AutoSyncEnabled = true,
+            AskRuleOnInsert = false,
+            TargetDevice = DeviceMatcher.CreateIdentity(volume)
+        };
+        var ruleA = new SyncRule { Name = "Alpha" };
+        ruleA.Sources.Add(new SourceItem { Path = sourceA, IsFolder = true, DestinationSubfolder = "Alpha" });
+        var ruleB = new SyncRule { Name = "Beta" };
+        ruleB.Sources.Add(new SourceItem { Path = sourceB, IsFolder = true, DestinationSubfolder = "Beta" });
+        settings.Rules.Add(ruleA);
+        settings.Rules.Add(ruleB);
+        settings.ActiveRuleId = ruleA.Id;
+        settings.TargetDevice!.LastRuleId = ruleB.Id;
+
+        var settingsStore = new SettingsStore(Path.Combine(root, "settings.json"));
+        settingsStore.Save(settings);
+        var fake = new FakeDeviceService();
+        using var coordinator = new SyncCoordinator(settingsStore, new ActivityStore(Path.Combine(root, "activity.json")), fake);
+
+        var finished = new TaskCompletionSource<SyncRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompted = false;
+        coordinator.RuleSelectionRequested += (_, _) => prompted = true;
+        coordinator.SyncFinished += (_, record) =>
+        {
+            if (record.Success)
+            {
+                finished.TrySetResult(record);
+            }
+        };
+
+        try
+        {
+            coordinator.Start();
+            await Task.Delay(250);
+            fake.SetVolumes(volume);
+
+            var record = await finished.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert(!prompted, "no prompt expected when asking is off");
+            Assert(record.FilesCopied == 1, $"expected one copied file, got {record.FilesCopied}");
+            Assert(coordinator.ActiveRule?.Id == ruleB.Id, "last rule for the device should be used");
+            Assert(File.Exists(Path.Combine(target, "Beta", "beta.txt")), "last rule should write its file");
+            Assert(!File.Exists(Path.Combine(target, "Alpha", "alpha.txt")), "other rules must not write");
+            Assert(coordinator.Settings.TargetDevice?.LastRuleId == ruleB.Id,
+                "last rule should stay remembered for the device");
+        }
+        finally
+        {
+            coordinator.Dispose();
+            DeleteTree(root);
+        }
     }
 
     private static async Task AutoSyncAfterInsertion()

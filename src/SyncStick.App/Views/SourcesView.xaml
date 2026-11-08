@@ -71,7 +71,44 @@
                         </StackPanel>
                     </Grid>
 
-                    <Border Margin="0,20,0,0"
+                    <Border Margin="0,18,0,0"
+                            Padding="14,11"
+                            Background="{StaticResource SurfaceHoverBrush}"
+                            CornerRadius="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           Style="{StaticResource Text.Overline}"
+                                           Text="RULE / 规则" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ActiveRuleNameText}" />
+                                <TextBlock Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="10.5"
+                                           Foreground="{StaticResource InkFaintBrush}"
+                                           Text="{Binding ActiveRuleSummaryText}" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="10.5"
+                                           Foreground="{StaticResource InkFaintBrush}"
+                                           Text="这一页编辑的是当前规则的同步内容。" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Command="{Binding NavigateCommand}"
+                                    CommandParameter="rules"
+                                    Content="管理规则"
+                                    Style="{StaticResource SecondaryButton}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Margin="0,12,0,0"
                             Padding="15,13"
                             Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource LineBrush}"

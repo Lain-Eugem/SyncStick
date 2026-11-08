@@ -20,10 +20,13 @@ namespace {
 
 constexpr const wchar_t* kMainClass = L"SyncStickPortable.Main";
 constexpr const wchar_t* kRuleClass = L"SyncStickPortable.Rule";
+constexpr const wchar_t* kRuleSetClass = L"SyncStickPortable.RuleSets";
+constexpr const wchar_t* kTextInputClass = L"SyncStickPortable.TextInput";
 constexpr const wchar_t* kAppTitle = L"SyncStick Portable";
 
 constexpr UINT kTimerProgress = 1;
 constexpr UINT kTimerAutoSync = 2;
+constexpr UINT kTimerChooseRuleSet = 3;
 constexpr UINT kMsgSyncDone = WM_APP + 1;
 
 constexpr COLORREF kPaper = RGB(244, 240, 232);
@@ -241,6 +244,7 @@ enum HitKind {
     HitRuleToggle,
     HitRuleEdit,
     HitRuleDelete,
+    HitRuleSets,
     HitEmptyAdd,
 };
 
@@ -738,6 +742,591 @@ bool RegisterRuleWindowClass(HINSTANCE instance) {
 }
 
 // ---------------------------------------------------------------------------
+// Small text input dialog (rule set name)
+// ---------------------------------------------------------------------------
+
+constexpr int kIdTextInputEdit = 3101;
+
+struct TextInputState {
+    HWND window = nullptr;
+    HWND edit = nullptr;
+    HWND parent = nullptr;
+    Fonts fonts;
+    HBRUSH paperBrush = nullptr;
+    std::wstring title;
+    std::wstring labelText;
+    std::wstring value;
+    bool accepted = false;
+
+    ~TextInputState() {
+        fonts.Destroy();
+        if (paperBrush != nullptr) {
+            DeleteObject(paperBrush);
+        }
+    }
+};
+
+void CreateTextInputControls(TextInputState* state) {
+    HWND dialog = state->window;
+    auto label = [&](const wchar_t* text, int x, int y, int w, int h, HFONT font) {
+        HWND control = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
+                                       S(x), S(y), S(w), S(h), dialog, nullptr,
+                                       GetModuleHandleW(nullptr), nullptr);
+        SetDialogControlFont(control, font);
+        return control;
+    };
+    label(state->title.c_str(), 28, 18, 360, 30, state->fonts.h2);
+    label(state->labelText.c_str(), 28, 58, 300, 20, state->fonts.small);
+
+    state->edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", state->value.c_str(),
+                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, S(28),
+                                  S(80), S(364), S(32), dialog,
+                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdTextInputEdit)),
+                                  GetModuleHandleW(nullptr), nullptr);
+    SetDialogControlFont(state->edit, state->fonts.body);
+
+    auto button = [&](int id, const wchar_t* text, int x, int w, bool primary) {
+        HWND control = CreateWindowExW(0, L"BUTTON", text,
+                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON |
+                                           (primary ? BS_DEFPUSHBUTTON : 0),
+                                       S(x), S(150), S(w), S(34), dialog,
+                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+                                       GetModuleHandleW(nullptr), nullptr);
+        SetDialogControlFont(control, state->fonts.button);
+        return control;
+    };
+    button(IDCANCEL, ss::T(L"取消").c_str(), 224, 90, false);
+    button(IDOK, ss::T(L"确定").c_str(), 324, 90, true);
+    SendMessageW(state->edit, EM_SETSEL, 0, -1);
+    SetFocus(state->edit);
+}
+
+void AcceptTextInput(TextInputState* state) {
+    state->value = TrimText(GetWindowTextString(state->edit));
+    state->accepted = true;
+    DestroyWindow(state->window);
+}
+
+LRESULT CALLBACK TextInputWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    TextInputState* state =
+        reinterpret_cast<TextInputState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (message) {
+    case WM_CREATE: {
+        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        state = reinterpret_cast<TextInputState*>(create->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+        state->window = hwnd;
+        g_dpi = GetDpiForWindow(hwnd);
+        state->fonts.Create(g_dpi);
+        state->paperBrush = CreateSolidBrush(kPaper);
+        CreateTextInputControls(state);
+        return 0;
+    }
+    case WM_CTLCOLORSTATIC:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), kPaper);
+            SetTextColor(reinterpret_cast<HDC>(wParam), kInkSoft);
+            return reinterpret_cast<LRESULT>(state->paperBrush);
+        }
+        break;
+    case WM_CTLCOLOREDIT:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), RGB(255, 255, 255));
+            SetTextColor(reinterpret_cast<HDC>(wParam), kInk);
+            static HBRUSH white = CreateSolidBrush(RGB(255, 255, 255));
+            return reinterpret_cast<LRESULT>(white);
+        }
+        break;
+    case WM_CTLCOLORBTN:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), kPaper);
+            return reinterpret_cast<LRESULT>(state->paperBrush);
+        }
+        break;
+    case WM_ERASEBKGND:
+        if (state != nullptr) {
+            RECT client{};
+            GetClientRect(hwnd, &client);
+            FillRectColor(reinterpret_cast<HDC>(wParam), client, kPaper);
+            return 1;
+        }
+        break;
+    case WM_COMMAND:
+        if (state != nullptr && LOWORD(wParam) == IDOK) {
+            AcceptTextInput(state);
+            return 0;
+        }
+        if (state != nullptr && LOWORD(wParam) == IDCANCEL) {
+            DestroyWindow(hwnd);
+            return 0;
+        }
+        break;
+    case WM_KEYDOWN:
+        if (state != nullptr) {
+            if (wParam == VK_ESCAPE) {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            if (wParam == VK_RETURN) {
+                AcceptTextInput(state);
+                return 0;
+            }
+        }
+        break;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        if (state != nullptr) {
+            state->window = nullptr;
+        }
+        return 0;
+    default:
+        break;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+bool ShowTextInputDialog(HWND parent, const wchar_t* title, const wchar_t* label,
+                         std::wstring& value) {
+    TextInputState state;
+    state.parent = parent;
+    state.title = title != nullptr ? title : L"";
+    state.labelText = label != nullptr ? label : L"";
+    state.value = value;
+
+    RECT parentRect{};
+    GetWindowRect(parent, &parentRect);
+    int width = S(420);
+    int height = S(210);
+    int x = parentRect.left + ((parentRect.right - parentRect.left) - width) / 2;
+    int y = parentRect.top + ((parentRect.bottom - parentRect.top) - height) / 2;
+    HWND dialog = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT, kTextInputClass, state.title.c_str(),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, width, height, parent, nullptr,
+        GetModuleHandleW(nullptr), &state);
+    if (dialog == nullptr) {
+        return false;
+    }
+    EnableWindow(parent, FALSE);
+    ShowWindow(dialog, SW_SHOW);
+    UpdateWindow(dialog);
+    SetForegroundWindow(dialog);
+
+    MSG message{};
+    while (IsWindow(dialog) && GetMessageW(&message, nullptr, 0, 0) > 0) {
+        if (!IsDialogMessageW(dialog, &message)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    EnableWindow(parent, TRUE);
+    SetActiveWindow(parent);
+    SetForegroundWindow(parent);
+    if (state.accepted) {
+        value = state.value;
+    }
+    return state.accepted;
+}
+
+bool RegisterTextInputWindowClass(HINSTANCE instance) {
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.lpfnWndProc = TextInputWindowProc;
+    windowClass.hInstance = instance;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.hbrBackground = CreateSolidBrush(kPaper);
+    windowClass.lpszClassName = kTextInputClass;
+    return RegisterClassExW(&windowClass) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+}
+
+// ---------------------------------------------------------------------------
+// Rule set picker dialog
+// ---------------------------------------------------------------------------
+
+constexpr int kIdSetList = 3001;
+constexpr int kIdSetUse = 3002;
+constexpr int kIdSetNew = 3003;
+constexpr int kIdSetRename = 3004;
+constexpr int kIdSetDelete = 3005;
+
+struct RuleSetDialogState {
+    HWND window = nullptr;
+    HWND list = nullptr;
+    HWND parent = nullptr;
+    Fonts fonts;
+    HBRUSH paperBrush = nullptr;
+    HBRUSH whiteBrush = nullptr;
+    ss::AppConfig* config = nullptr;
+    std::wstring chosenId;
+    bool accepted = false;
+    bool configChanged = false;
+
+    ~RuleSetDialogState() {
+        fonts.Destroy();
+        if (paperBrush != nullptr) {
+            DeleteObject(paperBrush);
+        }
+        if (whiteBrush != nullptr) {
+            DeleteObject(whiteBrush);
+        }
+    }
+};
+
+bool SameTextIgnoreCase(const std::wstring& left, const std::wstring& right) {
+    return _wcsicmp(left.c_str(), right.c_str()) == 0;
+}
+
+bool RuleSetNameTaken(const ss::AppConfig& config, const std::wstring& name,
+                      const std::wstring& exceptId) {
+    for (const auto& ruleSet : config.ruleSets) {
+        if (!exceptId.empty() && ruleSet.id == exceptId) {
+            continue;
+        }
+        if (SameTextIgnoreCase(ruleSet.name, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int SelectedRuleSetIndex(RuleSetDialogState* state) {
+    if (state->list == nullptr) {
+        return -1;
+    }
+    int index = static_cast<int>(SendMessageW(state->list, LB_GETCURSEL, 0, 0));
+    if (index < 0 || index >= static_cast<int>(state->config->ruleSets.size())) {
+        return -1;
+    }
+    return index;
+}
+
+void RefreshRuleSetList(RuleSetDialogState* state) {
+    if (state->list == nullptr || state->config == nullptr) {
+        return;
+    }
+    SendMessageW(state->list, LB_RESETCONTENT, 0, 0);
+    int select = 0;
+    for (size_t index = 0; index < state->config->ruleSets.size(); ++index) {
+        const ss::RuleSet& ruleSet = state->config->ruleSets[index];
+        std::wstring text = ruleSet.name;
+        if (ruleSet.id == state->config->activeRuleSetId) {
+            text += L"   ✓";
+        }
+        SendMessageW(state->list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+        if (ruleSet.id == state->chosenId) {
+            select = static_cast<int>(index);
+        }
+    }
+    if (!state->config->ruleSets.empty()) {
+        SendMessageW(state->list, LB_SETCURSEL, select, 0);
+    }
+}
+
+void AcceptRuleSetDialog(RuleSetDialogState* state) {
+    int index = SelectedRuleSetIndex(state);
+    if (index < 0) {
+        return;
+    }
+    state->chosenId = state->config->ruleSets[static_cast<size_t>(index)].id;
+    state->accepted = true;
+    DestroyWindow(state->window);
+}
+
+void NewRuleSetInDialog(RuleSetDialogState* state) {
+    std::wstring name = ss::T(L"新建的规则集");
+    if (!ShowTextInputDialog(state->window, ss::T(L"新建规则集").c_str(),
+                             ss::T(L"名称").c_str(), name)) {
+        return;
+    }
+    name = TrimText(name);
+    if (name.empty()) {
+        std::wstring body = ss::T(L"规则集名称不能为空");
+        std::wstring title = ss::T(L"新建规则集");
+        ss::ShowMessageBox(state->window, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (RuleSetNameTaken(*state->config, name, L"")) {
+        std::wstring body = ss::T(L"已经有同名的规则集了");
+        std::wstring title = ss::T(L"新建规则集");
+        ss::ShowMessageBox(state->window, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    ss::RuleSet ruleSet;
+    ruleSet.id = ss::NewRuleSetId(*state->config);
+    ruleSet.name = name;
+    state->config->ruleSets.push_back(std::move(ruleSet));
+    state->chosenId = state->config->ruleSets.back().id;
+    state->configChanged = true;
+    RefreshRuleSetList(state);
+}
+
+void RenameRuleSetInDialog(RuleSetDialogState* state) {
+    int index = SelectedRuleSetIndex(state);
+    if (index < 0) {
+        return;
+    }
+    ss::RuleSet& ruleSet = state->config->ruleSets[static_cast<size_t>(index)];
+    std::wstring name = ruleSet.name;
+    if (!ShowTextInputDialog(state->window, ss::T(L"重命名规则集").c_str(),
+                             ss::T(L"名称").c_str(), name)) {
+        return;
+    }
+    name = TrimText(name);
+    if (name.empty()) {
+        std::wstring body = ss::T(L"规则集名称不能为空");
+        std::wstring title = ss::T(L"重命名规则集");
+        ss::ShowMessageBox(state->window, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (RuleSetNameTaken(*state->config, name, ruleSet.id)) {
+        std::wstring body = ss::T(L"已经有同名的规则集了");
+        std::wstring title = ss::T(L"重命名规则集");
+        ss::ShowMessageBox(state->window, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    ruleSet.name = name;
+    state->configChanged = true;
+    RefreshRuleSetList(state);
+}
+
+void DeleteRuleSetInDialog(RuleSetDialogState* state) {
+    int index = SelectedRuleSetIndex(state);
+    if (index < 0) {
+        return;
+    }
+    if (state->config->ruleSets.size() <= 1) {
+        std::wstring body = ss::T(L"至少需要保留一个规则集");
+        std::wstring title = ss::T(L"删除规则集");
+        ss::ShowMessageBox(state->window, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    const ss::RuleSet& ruleSet = state->config->ruleSets[static_cast<size_t>(index)];
+    std::wstring body =
+        ss::TF(L"删除规则集「%s」吗？\n其中的规则也会一起删除；U 盘里的文件不会被删除。",
+               ruleSet.name);
+    std::wstring title = ss::T(L"删除规则集");
+    if (ss::ShowMessageBox(state->window, body.c_str(), title.c_str(),
+                           MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        return;
+    }
+    const std::wstring removedId = ruleSet.id;
+    state->config->ruleSets.erase(state->config->ruleSets.begin() + index);
+    for (auto& device : state->config->devices) {
+        if (device.lastRuleSetId == removedId) {
+            device.lastRuleSetId.clear();
+        }
+    }
+    if (state->config->activeRuleSetId == removedId) {
+        state->config->activeRuleSetId = state->config->ruleSets.front().id;
+    }
+    for (auto& device : state->config->devices) {
+        if (device.lastRuleSetId.empty()) {
+            device.lastRuleSetId = state->config->activeRuleSetId;
+        }
+    }
+    if (state->chosenId == removedId) {
+        state->chosenId = state->config->activeRuleSetId;
+    }
+    state->configChanged = true;
+    RefreshRuleSetList(state);
+}
+
+void CreateRuleSetControls(RuleSetDialogState* state) {
+    HWND dialog = state->window;
+    auto label = [&](const wchar_t* text, int x, int y, int w, int h, HFONT font,
+                     COLORREF color) {
+        HWND control = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT,
+                                       S(x), S(y), S(w), S(h), dialog, nullptr,
+                                       GetModuleHandleW(nullptr), nullptr);
+        SetDialogControlFont(control, font);
+        (void)color;
+        return control;
+    };
+    label(ss::T(L"选择规则集").c_str(), 28, 18, 360, 30, state->fonts.h2, kInk);
+    label(ss::T(L"这台电脑启动时使用哪一套规则").c_str(), 28, 52, 480, 20, state->fonts.small,
+          kInkSoft);
+
+    state->list = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
+                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
+                                      LBS_NOINTEGRALHEIGHT | LBS_NOTIFY,
+                                  S(28), S(82), S(504), S(164), dialog,
+                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSetList)),
+                                  GetModuleHandleW(nullptr), nullptr);
+    SetDialogControlFont(state->list, state->fonts.body);
+
+    auto button = [&](int id, const wchar_t* text, int x, int y, int w, bool primary) {
+        HWND control = CreateWindowExW(0, L"BUTTON", text,
+                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON |
+                                           (primary ? BS_DEFPUSHBUTTON : 0),
+                                       S(x), S(y), S(w), S(34), dialog,
+                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+                                       GetModuleHandleW(nullptr), nullptr);
+        SetDialogControlFont(control, state->fonts.button);
+        return control;
+    };
+    button(kIdSetUse, ss::T(L"使用").c_str(), 28, 262, 100, true);
+    button(kIdSetNew, ss::T(L"新建").c_str(), 144, 262, 100, false);
+    button(kIdSetRename, ss::T(L"重命名").c_str(), 260, 262, 100, false);
+    button(kIdSetDelete, ss::T(L"删除").c_str(), 376, 262, 100, false);
+    button(IDCANCEL, ss::T(L"取消").c_str(), 420, 330, 90, false);
+    RefreshRuleSetList(state);
+}
+
+LRESULT CALLBACK RuleSetWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    RuleSetDialogState* state =
+        reinterpret_cast<RuleSetDialogState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (message) {
+    case WM_CREATE: {
+        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        state = reinterpret_cast<RuleSetDialogState*>(create->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+        state->window = hwnd;
+        g_dpi = GetDpiForWindow(hwnd);
+        state->fonts.Create(g_dpi);
+        state->paperBrush = CreateSolidBrush(kPaper);
+        state->whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+        CreateRuleSetControls(state);
+        return 0;
+    }
+    case WM_CTLCOLORSTATIC:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), kPaper);
+            SetTextColor(reinterpret_cast<HDC>(wParam), kInkSoft);
+            return reinterpret_cast<LRESULT>(state->paperBrush);
+        }
+        break;
+    case WM_CTLCOLORLISTBOX:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), RGB(255, 255, 255));
+            SetTextColor(reinterpret_cast<HDC>(wParam), kInk);
+            return reinterpret_cast<LRESULT>(state->whiteBrush);
+        }
+        break;
+    case WM_CTLCOLORBTN:
+        if (state != nullptr) {
+            SetBkColor(reinterpret_cast<HDC>(wParam), kPaper);
+            return reinterpret_cast<LRESULT>(state->paperBrush);
+        }
+        break;
+    case WM_ERASEBKGND:
+        if (state != nullptr) {
+            RECT client{};
+            GetClientRect(hwnd, &client);
+            FillRectColor(reinterpret_cast<HDC>(wParam), client, kPaper);
+            return 1;
+        }
+        break;
+    case WM_COMMAND:
+        if (state == nullptr) {
+            break;
+        }
+        if (LOWORD(wParam) == kIdSetList && HIWORD(wParam) == LBN_DBLCLK) {
+            AcceptRuleSetDialog(state);
+            return 0;
+        }
+        switch (LOWORD(wParam)) {
+        case kIdSetUse:
+            AcceptRuleSetDialog(state);
+            return 0;
+        case kIdSetNew:
+            NewRuleSetInDialog(state);
+            return 0;
+        case kIdSetRename:
+            RenameRuleSetInDialog(state);
+            return 0;
+        case kIdSetDelete:
+            DeleteRuleSetInDialog(state);
+            return 0;
+        case IDCANCEL:
+            DestroyWindow(hwnd);
+            return 0;
+        default:
+            break;
+        }
+        break;
+    case WM_KEYDOWN:
+        if (state != nullptr) {
+            if (wParam == VK_ESCAPE) {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            if (wParam == VK_RETURN) {
+                AcceptRuleSetDialog(state);
+                return 0;
+            }
+        }
+        break;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        if (state != nullptr) {
+            state->window = nullptr;
+        }
+        return 0;
+    default:
+        break;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+bool ShowRuleSetDialog(HWND parent, ss::AppConfig& config, std::wstring& chosenId,
+                       bool& configChanged) {
+    RuleSetDialogState state;
+    state.parent = parent;
+    state.config = &config;
+    state.chosenId = chosenId;
+
+    RECT parentRect{};
+    GetWindowRect(parent, &parentRect);
+    int width = S(560);
+    int height = S(400);
+    int x = parentRect.left + ((parentRect.right - parentRect.left) - width) / 2;
+    int y = parentRect.top + ((parentRect.bottom - parentRect.top) - height) / 2;
+    HWND dialog = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT, kRuleSetClass, ss::T(L"选择规则集").c_str(),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, x, y, width, height, parent, nullptr,
+        GetModuleHandleW(nullptr), &state);
+    if (dialog == nullptr) {
+        return false;
+    }
+    EnableWindow(parent, FALSE);
+    ShowWindow(dialog, SW_SHOW);
+    UpdateWindow(dialog);
+    SetForegroundWindow(dialog);
+
+    MSG message{};
+    while (IsWindow(dialog) && GetMessageW(&message, nullptr, 0, 0) > 0) {
+        if (!IsDialogMessageW(dialog, &message)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    EnableWindow(parent, TRUE);
+    SetActiveWindow(parent);
+    SetForegroundWindow(parent);
+    configChanged = state.configChanged;
+    if (state.accepted) {
+        chosenId = state.chosenId;
+    }
+    return state.accepted;
+}
+
+bool RegisterRuleSetWindowClass(HINSTANCE instance) {
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.lpfnWndProc = RuleSetWindowProc;
+    windowClass.hInstance = instance;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.hbrBackground = CreateSolidBrush(kPaper);
+    windowClass.lpszClassName = kRuleSetClass;
+    return RegisterClassExW(&windowClass) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+}
+
+// ---------------------------------------------------------------------------
 // Main window
 // ---------------------------------------------------------------------------
 
@@ -810,9 +1399,16 @@ private:
 
     ss::DeviceRules* CurrentDevice();
     const ss::DeviceRules* CurrentDevice() const;
+    ss::RuleSet* ActiveRuleSet();
+    const ss::RuleSet* ActiveRuleSet() const;
+    void EnsureRuleSet();
+    std::wstring ActiveRuleSetName() const;
     int RuleCount() const;
     int EnabledRuleCount() const;
     bool SaveConfiguration(bool showError);
+    void ShowRuleSetsDialog();
+    void ApplyRuleSet(const std::wstring& id);
+    void ShowStartupRuleSetChooser();
     void AddRule();
     void EditRule(int index);
     void DeleteRule(int index);
@@ -861,6 +1457,7 @@ private:
     HBRUSH backgroundBrush_ = nullptr;
     std::vector<HitTarget> hits_;
     RECT langToggleRect_{};
+    RECT ruleSetChipRect_{};
     int scroll_ = 0;
     int maxScroll_ = 0;
 
@@ -920,11 +1517,15 @@ bool MainWindow::Create() {
     if (device.name.empty()) {
         device.name = identity_.name;
     }
+    const bool hadRuleSets = !config_.ruleSets.empty();
+    EnsureRuleSet();
+    // This PC keeps using the rule set it used last time, even if the config was
+    // carried over from another machine that selected a different one.
+    if (config_.FindRuleSet(device.lastRuleSetId) != nullptr) {
+        config_.activeRuleSetId = device.lastRuleSetId;
+    }
 
-    if (!loaded && configError_.empty()) {
-        std::wstring saveError;
-        ss::SaveConfig(configPath_, config_, saveError);
-    } else if (newDevice) {
+    if ((!loaded && configError_.empty()) || newDevice || !hadRuleSets) {
         std::wstring saveError;
         ss::SaveConfig(configPath_, config_, saveError);
     }
@@ -938,7 +1539,9 @@ bool MainWindow::Create() {
     if (appIcon_ == nullptr) {
         appIcon_ = LoadIconW(nullptr, IDI_APPLICATION);
     }
-    if (!RegisterRuleWindowClass(instance_) || !RegisterMainWindowClass(instance_, appIcon_)) {
+    if (!RegisterRuleWindowClass(instance_) || !RegisterRuleSetWindowClass(instance_) ||
+        !RegisterTextInputWindowClass(instance_) ||
+        !RegisterMainWindowClass(instance_, appIcon_)) {
         return false;
     }
 
@@ -977,6 +1580,9 @@ bool MainWindow::Create() {
         if (EnabledRuleCount() > 0) {
             ShowDesktopConflictNotice();
         }
+    } else if (config_.ruleSets.size() > 1) {
+        // More than one rule set: let the user pick one before auto sync.
+        SetTimer(hwnd_, kTimerChooseRuleSet, 250, nullptr);
     } else {
         SetTimer(hwnd_, kTimerAutoSync, 900, nullptr);
     }
@@ -1044,6 +1650,11 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
             }
             return 0;
         }
+        if (wParam == kTimerChooseRuleSet) {
+            KillTimer(hwnd_, kTimerChooseRuleSet);
+            ShowStartupRuleSetChooser();
+            return 0;
+        }
         if (wParam == kTimerProgress) {
             InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
@@ -1086,6 +1697,9 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
             break;
         case HitLanguage:
             ApplyLanguage(hit->index == 0 ? ss::Language::Zh : ss::Language::En);
+            break;
+        case HitRuleSets:
+            ShowRuleSetsDialog();
             break;
         case HitRuleOpen:
             OpenRulePath(hit->index);
@@ -1132,6 +1746,10 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
                 OpenLog();
                 return 0;
             }
+            if (wParam == 'R') {
+                ShowRuleSetsDialog();
+                return 0;
+            }
         }
         break;
     case kMsgSyncFinished:
@@ -1154,6 +1772,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
         return 0;
     case WM_DESTROY:
         KillTimer(hwnd_, kTimerAutoSync);
+        KillTimer(hwnd_, kTimerChooseRuleSet);
         KillTimer(hwnd_, kTimerProgress);
         if (syncActive_.load()) {
             progress_.cancel.store(true);
@@ -1261,13 +1880,18 @@ void MainWindow::RebuildHits(int width, int height) {
     };
     add(contentX, toolbarY, contentX + S(150), toolbarY + S(44), HitSync);
     add(contentX + S(162), toolbarY, contentX + S(304), toolbarY + S(44), HitAdd);
-    add(contentX + S(316), toolbarY, contentX + S(438), toolbarY + S(44), HitLog);
+    add(contentX + S(316), toolbarY, contentX + S(426), toolbarY + S(44), HitRuleSets);
+    add(contentX + S(438), toolbarY, contentX + S(560), toolbarY + S(44), HitLog);
     if (langToggleRect_.right > langToggleRect_.left) {
         int middle = (langToggleRect_.left + langToggleRect_.right) / 2;
         add(langToggleRect_.left, langToggleRect_.top, middle, langToggleRect_.bottom,
             HitLanguage, 0);
         add(middle, langToggleRect_.top, langToggleRect_.right, langToggleRect_.bottom,
             HitLanguage, 1);
+    }
+    if (ruleSetChipRect_.right > ruleSetChipRect_.left) {
+        add(ruleSetChipRect_.left, ruleSetChipRect_.top, ruleSetChipRect_.right,
+            ruleSetChipRect_.bottom, HitRuleSets);
     }
 
     const int cardHeight = S(98);
@@ -1277,8 +1901,8 @@ void MainWindow::RebuildHits(int width, int height) {
     if (showStatus) {
         rulesTop += S(58) + S(76);
     }
-    const ss::DeviceRules* device = CurrentDevice();
-    int count = device == nullptr ? 0 : static_cast<int>(device->rules.size());
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    int count = ruleSet == nullptr ? 0 : static_cast<int>(ruleSet->rules.size());
     int contentBottom = rulesTop + count * (cardHeight + cardGap);
     if (count == 0) {
         contentBottom = rulesTop + S(176);
@@ -1330,23 +1954,118 @@ const ss::DeviceRules* MainWindow::CurrentDevice() const {
     return config_.FindDevice(identity_.id);
 }
 
+ss::RuleSet* MainWindow::ActiveRuleSet() {
+    return config_.FindRuleSet(config_.activeRuleSetId);
+}
+
+const ss::RuleSet* MainWindow::ActiveRuleSet() const {
+    return config_.FindRuleSet(config_.activeRuleSetId);
+}
+
+void MainWindow::EnsureRuleSet() {
+    if (config_.ruleSets.empty()) {
+        ss::RuleSet ruleSet;
+        ruleSet.id = ss::NewRuleSetId(config_);
+        ruleSet.name = ss::DefaultRuleSetNameText();
+        config_.ruleSets.push_back(std::move(ruleSet));
+        config_.activeRuleSetId = config_.ruleSets.front().id;
+    }
+    if (config_.FindRuleSet(config_.activeRuleSetId) == nullptr) {
+        config_.activeRuleSetId = config_.ruleSets.front().id;
+    }
+    ss::DeviceRules* device = CurrentDevice();
+    if (device != nullptr && config_.FindRuleSet(device->lastRuleSetId) == nullptr) {
+        device->lastRuleSetId = config_.activeRuleSetId;
+    }
+}
+
+std::wstring MainWindow::ActiveRuleSetName() const {
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    return ruleSet != nullptr ? ruleSet->name : std::wstring();
+}
+
 int MainWindow::RuleCount() const {
-    const ss::DeviceRules* device = CurrentDevice();
-    return device == nullptr ? 0 : static_cast<int>(device->rules.size());
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    return ruleSet == nullptr ? 0 : static_cast<int>(ruleSet->rules.size());
 }
 
 int MainWindow::EnabledRuleCount() const {
-    const ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr) {
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr) {
         return 0;
     }
     int count = 0;
-    for (const auto& rule : device->rules) {
+    for (const auto& rule : ruleSet->rules) {
         if (rule.enabled) {
             ++count;
         }
     }
     return count;
+}
+
+void MainWindow::ShowRuleSetsDialog() {
+    EnsureRuleSet();
+    std::wstring chosenId = config_.activeRuleSetId;
+    bool changed = false;
+    const bool accepted = ::ShowRuleSetDialog(hwnd_, config_, chosenId, changed);
+    if (changed) {
+        EnsureRuleSet();
+        SaveConfiguration(false);
+    }
+    if (accepted && chosenId != config_.activeRuleSetId) {
+        ApplyRuleSet(chosenId);
+    } else {
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+}
+
+void MainWindow::ApplyRuleSet(const std::wstring& id) {
+    ss::RuleSet* ruleSet = config_.FindRuleSet(id);
+    if (ruleSet == nullptr) {
+        return;
+    }
+    config_.activeRuleSetId = id;
+    if (ss::DeviceRules* device = CurrentDevice()) {
+        device->lastRuleSetId = id;
+    }
+    SaveConfiguration(false);
+    scroll_ = 0;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::ShowStartupRuleSetChooser() {
+    EnsureRuleSet();
+    bool accepted = false;
+    if (config_.ruleSets.size() > 1) {
+        // Preselect the set this PC used last time, so a repeated insert is
+        // a single confirmation.  Fall back to the active set for a new PC.
+        std::wstring chosenId = config_.activeRuleSetId;
+        if (const ss::DeviceRules* device = CurrentDevice()) {
+            if (config_.FindRuleSet(device->lastRuleSetId) != nullptr) {
+                chosenId = device->lastRuleSetId;
+            }
+        }
+
+        bool changed = false;
+        accepted = ::ShowRuleSetDialog(hwnd_, config_, chosenId, changed);
+        if (changed) {
+            EnsureRuleSet();
+            SaveConfiguration(false);
+        }
+        if (accepted && chosenId != config_.activeRuleSetId) {
+            ApplyRuleSet(chosenId);
+        }
+    }
+    InvalidateRect(hwnd_, nullptr, FALSE);
+
+    // Cancelling the chooser means "do not sync this time".  Only schedule the
+    // automatic sync when the user confirmed a rule set (or when there was
+    // nothing to choose).
+    if ((config_.ruleSets.size() <= 1 || accepted)
+        && !syncActive_.load()
+        && EnabledRuleCount() > 0) {
+        SetTimer(hwnd_, kTimerAutoSync, 200, nullptr);
+    }
 }
 
 bool MainWindow::SaveConfiguration(bool showError) {
@@ -1363,8 +2082,9 @@ bool MainWindow::SaveConfiguration(bool showError) {
 }
 
 void MainWindow::AddRule() {
-    ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr) {
+    EnsureRuleSet();
+    ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr) {
         return;
     }
     ss::Rule rule;
@@ -1374,7 +2094,7 @@ void MainWindow::AddRule() {
     if (!ShowRuleDialog(hwnd_, rule, true, appDir_, identity_.name)) {
         return;
     }
-    for (const auto& existing : device->rules) {
+    for (const auto& existing : ruleSet->rules) {
         if (ss::IsSamePath(existing.pcPath, rule.pcPath) &&
             ss::IsSamePath(existing.usbPath, rule.usbPath)) {
             std::wstring body = ss::T(L"这个电脑路径已经有一条相同的同步项了。");
@@ -1383,31 +2103,31 @@ void MainWindow::AddRule() {
             return;
         }
     }
-    device->rules.push_back(rule);
+    ruleSet->rules.push_back(rule);
     SaveConfiguration(true);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::EditRule(int index) {
-    ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr || index < 0 || index >= static_cast<int>(device->rules.size())) {
+    ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr || index < 0 || index >= static_cast<int>(ruleSet->rules.size())) {
         return;
     }
-    ss::Rule rule = device->rules[static_cast<size_t>(index)];
+    ss::Rule rule = ruleSet->rules[static_cast<size_t>(index)];
     if (!ShowRuleDialog(hwnd_, rule, false, appDir_, identity_.name)) {
         return;
     }
-    device->rules[static_cast<size_t>(index)] = rule;
+    ruleSet->rules[static_cast<size_t>(index)] = rule;
     SaveConfiguration(true);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::DeleteRule(int index) {
-    ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr || index < 0 || index >= static_cast<int>(device->rules.size())) {
+    ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr || index < 0 || index >= static_cast<int>(ruleSet->rules.size())) {
         return;
     }
-    const ss::Rule& rule = device->rules[static_cast<size_t>(index)];
+    const ss::Rule& rule = ruleSet->rules[static_cast<size_t>(index)];
     std::wstring message =
         ss::TF(L"删除“%s”这条规则吗？\nU 盘里的文件不会被删除。", rule.name);
     std::wstring title = ss::T(L"删除同步项");
@@ -1415,28 +2135,28 @@ void MainWindow::DeleteRule(int index) {
                     MB_YESNO | MB_ICONQUESTION) != IDYES) {
         return;
     }
-    device->rules.erase(device->rules.begin() + index);
+    ruleSet->rules.erase(ruleSet->rules.begin() + index);
     SaveConfiguration(true);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::ToggleRule(int index) {
-    ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr || index < 0 || index >= static_cast<int>(device->rules.size())) {
+    ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr || index < 0 || index >= static_cast<int>(ruleSet->rules.size())) {
         return;
     }
-    ss::Rule& rule = device->rules[static_cast<size_t>(index)];
+    ss::Rule& rule = ruleSet->rules[static_cast<size_t>(index)];
     rule.enabled = !rule.enabled;
     SaveConfiguration(true);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::OpenRulePath(int index) {
-    const ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr || index < 0 || index >= static_cast<int>(device->rules.size())) {
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr || index < 0 || index >= static_cast<int>(ruleSet->rules.size())) {
         return;
     }
-    const ss::Rule& rule = device->rules[static_cast<size_t>(index)];
+    const ss::Rule& rule = ruleSet->rules[static_cast<size_t>(index)];
     if (!ss::PathExists(rule.pcPath)) {
         std::wstring body = ss::T(L"这个电脑路径已经不存在了，可以编辑或删除这条规则。");
         std::wstring title = ss::T(L"路径不存在");
@@ -1485,8 +2205,8 @@ void MainWindow::StartSync(bool interactive) {
     }
     desktopRunning_ = false;
     desktopWarningShown_ = false;
-    ss::DeviceRules* device = CurrentDevice();
-    if (device == nullptr || device->rules.empty()) {
+    ss::RuleSet* ruleSet = ActiveRuleSet();
+    if (ruleSet == nullptr || ruleSet->rules.empty()) {
         if (interactive) {
             std::wstring body = ss::T(L"还没有同步项，先添加一个文件夹或文件吧。");
             std::wstring title = ss::T(L"还没有同步项");
@@ -1499,7 +2219,7 @@ void MainWindow::StartSync(bool interactive) {
         return;
     }
     bool anyEnabled = false;
-    for (const auto& rule : device->rules) {
+    for (const auto& rule : ruleSet->rules) {
         if (rule.enabled) {
             anyEnabled = true;
             break;
@@ -1514,8 +2234,14 @@ void MainWindow::StartSync(bool interactive) {
         return;
     }
     KillTimer(hwnd_, kTimerAutoSync);
+    KillTimer(hwnd_, kTimerChooseRuleSet);
     SaveConfiguration(false);
-    ss::DeviceRules snapshot = *device;
+    ss::DeviceRules snapshot;
+    if (const ss::DeviceRules* device = CurrentDevice()) {
+        snapshot.id = device->id;
+        snapshot.name = device->name;
+    }
+    snapshot.rules = ruleSet->rules;
     {
         std::lock_guard<std::mutex> lock(progress_.mutex);
         progress_.phase = ss::T(L"正在准备");
@@ -1655,9 +2381,16 @@ void MainWindow::DrawHeader(HDC dc, int width, int contentX, int contentW) {
     std::wstring machine = ss::TF(L"这台电脑 · %s", identity_.name);
     DrawTextLine(dc, machine, RECT{brandX, S(92), brandX + S(360), S(112)}, fonts_.tiny,
                  kOnDarkFaint);
-    DrawTextLine(dc, ss::T(L"规则保存在这支 U 盘里"),
-                 RECT{brandX, S(110), brandX + S(420), S(128)}, fonts_.tiny,
-                 RGB(130, 145, 130));
+    std::wstring ruleSetName = ActiveRuleSetName();
+    std::wstring chipText = ruleSetName.empty()
+                                ? ss::T(L"规则集")
+                                : ss::TF(L"规则集 · %s", ruleSetName);
+    int chipWidth = std::max(S(120), MeasureTextWidth(dc, chipText, fonts_.tiny) + S(24));
+    RECT chipRect{brandX, S(108), brandX + chipWidth, S(132)};
+    ruleSetChipRect_ = chipRect;
+    RoundCard(dc, chipRect, S(11), kDarkRaised, RGB(70, 82, 72));
+    DrawTextLine(dc, chipText, chipRect, fonts_.tiny, kOnDark,
+                 DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
     int ringCenterX = contentX + contentW - S(96);
     int ringCenterY = S(61);
@@ -1707,7 +2440,9 @@ void MainWindow::DrawToolbar(HDC dc, int width, int contentX, int contentW) {
                syncActive_.load() || RuleCount() > 0);
     RECT addRect{contentX + S(162), y, contentX + S(304), y + height};
     DrawButton(dc, addRect, ss::T(L"添加同步项"), false, false);
-    RECT logRect{contentX + S(316), y, contentX + S(438), y + height};
+    RECT setsRect{contentX + S(316), y, contentX + S(426), y + height};
+    DrawButton(dc, setsRect, ss::T(L"规则集"), false, true);
+    RECT logRect{contentX + S(438), y, contentX + S(560), y + height};
     DrawButton(dc, logRect, ss::T(L"打开日志"), false, true);
 
     std::wstring countText =
@@ -1717,7 +2452,7 @@ void MainWindow::DrawToolbar(HDC dc, int width, int contentX, int contentW) {
                      ss::CountText(EnabledRuleCount(), L"%s 个启用", L"enabled", L"enabled");
     }
     DrawTextLine(dc, countText,
-                 RECT{contentX + contentW - S(360), y, contentX + contentW, y + height},
+                 RECT{contentX + contentW - S(340), y, contentX + contentW, y + height},
                  fonts_.small, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 }
 
@@ -1810,8 +2545,8 @@ void MainWindow::DrawRules(HDC dc, int width, int contentX, int contentW, int se
                       sectionY + S(24)},
                  fonts_.tiny, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 
-    const ss::DeviceRules* device = CurrentDevice();
-    int count = device == nullptr ? 0 : static_cast<int>(device->rules.size());
+    const ss::RuleSet* ruleSet = ActiveRuleSet();
+    int count = ruleSet == nullptr ? 0 : static_cast<int>(ruleSet->rules.size());
     if (count == 0) {
         DrawEmptyState(dc, contentX, rulesTop - scroll_, contentW);
         DrawTextLine(dc,
@@ -1828,7 +2563,7 @@ void MainWindow::DrawRules(HDC dc, int width, int contentX, int contentW, int se
         if (top + cardHeight <= rulesTop || top >= width * 0 + (S(100000))) {
             continue;
         }
-        DrawRuleCard(dc, device->rules[static_cast<size_t>(index)], index, contentX, top,
+        DrawRuleCard(dc, ruleSet->rules[static_cast<size_t>(index)], index, contentX, top,
                      contentW, cardHeight);
     }
 
@@ -1926,7 +2661,7 @@ void MainWindow::DrawFooter(HDC dc, int width, int contentX, int contentW) {
     DrawTextLine(dc, footer,
                  RECT{contentX, y + S(8), contentX + contentW - S(180), y + S(30)},
                  fonts_.tiny, desktopRunning_ ? kAccent : kInkFaint);
-    DrawTextLine(dc, L"SyncStick Portable 1.0.2",
+    DrawTextLine(dc, L"SyncStick Portable 1.1.0",
                  RECT{contentX + contentW - S(200), y + S(8), contentX + contentW, y + S(30)},
                  fonts_.monoSmall, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 }

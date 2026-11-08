@@ -8,10 +8,12 @@ The repository contains two editions:
 
 | Edition | Best for | Implementation |
 | --- | --- | --- |
-| Desktop 1.0.4 | A normal PC, and a USB drive you want to keep clean | WPF / .NET 10, tray resident, syncs on insert |
-| Portable 1.0.2 | Low-resource PCs, or PCs without the .NET runtime | Native C++ / Win32, one exe on the USB drive, one double-click |
+| Desktop 1.1.0 | A normal PC, and a USB drive you want to keep clean | WPF / .NET 10, tray resident, syncs on insert |
+| Portable 1.1.0 | Low-resource PCs, or PCs without the .NET runtime | Native C++ / Win32, one exe on the USB drive, one double-click |
 
 ![Desktop dashboard (English UI)](docs/screenshots/en/dashboard.png)
+
+![Desktop rule sets (English UI)](docs/screenshots/en/rules.png)
 
 ![Portable main window (English UI)](portable/docs/screenshots/en/portable-main-en.png)
 
@@ -21,6 +23,7 @@ The repository contains two editions:
 
 - Remembers the target USB drive by volume serial number, so it still works after changing the drive letter or USB port.
 - Add multiple files or folders; each item can have its own destination subfolder on the USB drive.
+- Save sync layouts as named rule sets (for example Work and Archive). When a USB drive is inserted, choose the set to use; each drive remembers its last choice.
 - “Smart overwrite” by default: only new or changed files are copied; skipped when size and modification time match.
 - Optional “mirror clean”: removes extra files from the destination folder; off by default and confirmed before enabling.
 - Writes to a temporary file and renames it atomically, so unplugging mid-write does not leave a half-written file.
@@ -33,6 +36,7 @@ The repository contains two editions:
 
 - No installation, no registry writes; configuration and logs stay on the USB drive.
 - Rules are identified per PC and stored on the same USB drive.
+- Multiple named rule sets are supported; choose one at startup, and each PC remembers its last choice.
 - Bidirectional sync: the newer modification time wins; differences under 3 seconds are treated as a conflict and skipped.
 - Never deletes files.
 - The USB destination supports a relative path and a folder picker.
@@ -96,8 +100,8 @@ The script compiles `core.cpp`, `main.cpp`, and the resource file, runs the core
 
 `release/` contains verified archives:
 
-- `SyncStick-1.0.4-win-x64.zip`: desktop edition; extract and run `SyncStick.exe`.
-- `SyncStickPortable-1.0.2.zip`: portable edition; extract to the USB root and run `SyncStickPortable.exe`.
+- `SyncStick-1.1.0-win-x64.zip`: desktop edition; extract and run `SyncStick.exe`.
+- `SyncStickPortable-1.1.0.zip`: portable edition; extract to the USB root and run `SyncStickPortable.exe`.
 - `SHA256SUMS.txt`: SHA-256 checksums for both archives.
 
 ## Known limitations

@@ -70,6 +70,9 @@ public partial class App : Application
             if (!startMinimized)
             {
                 trayReady = CreateTrayIcon();
+                // Show the window before starting the coordinator: the rule picker
+                // can be raised from Start() and needs a visible owner window.
+                ShowMainWindow();
             }
 
             _coordinator.Start();
@@ -82,14 +85,10 @@ public partial class App : Application
                 // the app keeps syncing in the background with no visible icon.
                 _ = CreateTrayIconWhenShellIsReadyAsync();
             }
-            else
+            else if (!trayReady)
             {
-                ShowMainWindow();
-                if (!trayReady)
-                {
-                    ShowTrayUnavailableNotice(
-                        "系统托盘不可用，已打开主窗口。你仍然可以正常同步，但请保持窗口打开。");
-                }
+                ShowTrayUnavailableNotice(
+                    "系统托盘不可用，已打开主窗口。你仍然可以正常同步，但请保持窗口打开。");
             }
         }
         catch (Exception ex)

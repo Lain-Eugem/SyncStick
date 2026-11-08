@@ -360,6 +360,48 @@ internal static class ZhEnDictionary
         ["选择要同步的文件"] = "Choose files to sync",
         ["选择 U 盘上的写入文件夹"] = "Choose a write folder on the USB drive",
 
+        // ---------------------------------------------------------------- rules
+        ["规则"] = "Rules",
+        ["RULES / 规则"] = "RULES",
+        ["RULE / 规则"] = "RULE",
+        ["为每块 U 盘准备一套规则"] = "A rule set for every USB drive",
+        ["提前写好要同步的文件和它们的目标位置。插入 U 盘后，可以直接选择要用哪一套规则。"] =
+            "Write down what to sync and where it goes. After a drive is inserted, choose the rule set you need.",
+        ["编辑当前规则"] = "Edit active rule",
+        ["新建规则"] = "New rule",
+        ["每个规则都有自己的同步内容列表。切换规则只改变下一次写什么，不会移动或删除任何文件。"] =
+            "Each rule has its own sync items. Switching rules only changes what gets written next; no files are moved or deleted.",
+        ["规则列表"] = "Rule sets",
+        ["输入新的规则名称，按保存后生效。"] = "Enter a new rule name, then save.",
+        ["使用此规则"] = "Use this rule",
+        ["编辑内容"] = "Edit items",
+        ["重命名"] = "Rename",
+        ["复制"] = "Duplicate",
+        ["删除"] = "Delete",
+        ["保存"] = "Save",
+        ["只有一个规则时，插入目标 U 盘会自动同步。有多个规则时，可以在“设置”里选择插入时是否询问。也可以随时在“目标设备”页手动同步当前规则。"] =
+            "With one rule, the target USB drive syncs automatically. With several rules, choose in Settings whether to ask on insert. You can also sync the active rule manually from Devices at any time.",
+        ["这一页编辑的是当前规则的同步内容。"] = "This page edits the sync items of the active rule.",
+        ["管理规则"] = "Manage rules",
+        ["插入时选择规则"] = "Ask which rule on insert",
+        ["有多个规则时，插入目标 U 盘后先选择要同步哪一套；关掉后自动使用这块设备上次用过的规则。"] =
+            "With several rules, choose which one to sync after the target drive is inserted. When off, the rule last used with this drive is used.",
+        ["选择要同步的规则"] = "Choose a rule to sync",
+        ["选择后立即用这个规则同步。下次插入这块设备时，会默认选中上次使用的规则。"] =
+            "The selected rule syncs right away. Next time this device is inserted, the last used rule is preselected.",
+        ["用此规则同步"] = "Sync with this rule",
+        ["删除规则？"] = "Delete rule?",
+        ["删除规则"] = "Delete rule",
+        ["“{0}”的同步内容列表会被删除，已经同步的文件不会受影响。"] =
+            "The sync items of “{0}” will be deleted. Files already synced are not affected.",
+        ["规则名称不能为空。"] = "Rule name cannot be empty.",
+        ["已经有同名规则了。"] = "A rule with this name already exists.",
+        ["至少要保留一个规则，SyncStick 才知道要同步什么。"] =
+            "Keep at least one rule so SyncStick knows what to sync.",
+        ["正在编辑当前规则的同步内容。"] = "Editing the sync items of the active rule.",
+        ["默认规则"] = "Default rule",
+        ["新规则"] = "New rule",
+
         // ------------------------------------------------------ Core / Engine
         ["未命名设备"] = "Unnamed device",
         ["未命名 U 盘"] = "Unnamed USB drive",

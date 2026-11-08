@@ -35,6 +35,18 @@ std::string ReadText(const std::wstring& path) {
     return text;
 }
 
+std::string ToUtf8(const std::wstring& text) {
+    if (text.empty()) {
+        return std::string();
+    }
+    int wide = static_cast<int>(text.size());
+    int needed =
+        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), wide, nullptr, 0, nullptr, nullptr);
+    std::string result(static_cast<size_t>(needed), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), wide, result.data(), needed, nullptr, nullptr);
+    return result;
+}
+
 bool SetTimestamp(const std::wstring& path, const FILETIME& time) {
     HANDLE file = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES,
                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
@@ -193,24 +205,70 @@ int wmain() {
 
     ss::AppConfig config;
     ss::DeviceRules& savedDevice = config.FindOrCreateDevice(L"TEST", L"测试电脑");
+    ss::RuleSet& savedSet = config.FindOrCreateRuleSet(L"rs1", L"携带规则");
     ss::Rule savedRule = folderRule;
     savedRule.usbPath = ss::JoinPath(ss::GetAppDirectory(), L"test-data\\usb\\project");
-    savedDevice.rules.push_back(savedRule);
+    savedSet.rules.push_back(savedRule);
+    config.activeRuleSetId = L"rs1";
+    savedDevice.lastRuleSetId = L"rs1";
+    config.language = L"en";
     std::wstring configPath = ss::JoinPath(root, L"SyncStickPortable.ini");
     std::wstring error;
     Check(ss::SaveConfig(configPath, config, error), "config save succeeds");
+    std::string savedText = ReadText(configPath);
+    Check(savedText.find("[ruleset.rs1]") != std::string::npos, "config stores rule sets");
+    Check(savedText.find("[rule.TEST.") == std::string::npos,
+          "config stops writing legacy rule sections");
     ss::AppConfig loaded;
     Check(ss::LoadConfig(configPath, loaded, error), "config load succeeds");
     ss::DeviceRules* loadedDevice = loaded.FindDevice(L"TEST");
     Check(loadedDevice != nullptr, "config roundtrips device");
-    Check(loadedDevice != nullptr && loadedDevice->rules.size() == 1, "config roundtrips rule");
-    if (loadedDevice != nullptr && !loadedDevice->rules.empty()) {
-        Check(loadedDevice->rules[0].mode == L"both", "config roundtrips mode");
-        Check(ss::IsSamePath(loadedDevice->rules[0].pcPath, folderRule.pcPath),
+    Check(loadedDevice != nullptr && loadedDevice->lastRuleSetId == L"rs1",
+          "config roundtrips last rule set");
+    Check(loaded.activeRuleSetId == L"rs1", "config roundtrips active rule set");
+    ss::RuleSet* loadedSet = loaded.FindRuleSet(L"rs1");
+    Check(loadedSet != nullptr && loadedSet->name == L"携带规则",
+          "config roundtrips rule set name");
+    Check(loadedSet != nullptr && loadedSet->rules.size() == 1, "config roundtrips rule");
+    if (loadedSet != nullptr && !loadedSet->rules.empty()) {
+        Check(loadedSet->rules[0].mode == L"both", "config roundtrips mode");
+        Check(ss::IsSamePath(loadedSet->rules[0].pcPath, folderRule.pcPath),
               "config roundtrips pc path");
-        Check(ss::IsSamePath(loadedDevice->rules[0].usbPath, savedRule.usbPath),
+        Check(ss::IsSamePath(loadedSet->rules[0].usbPath, savedRule.usbPath),
               "config roundtrips usb path");
-        Check(loadedDevice->rules[0].kind == L"folder", "config roundtrips kind");
+        Check(loadedSet->rules[0].kind == L"folder", "config roundtrips kind");
+    }
+
+    // A v1.0.x ini stores rules per device. Loading it must migrate those rules
+    // into a rule set named after the device, without losing anything.
+    std::wstring legacyPath = ss::JoinPath(root, L"legacy.ini");
+    std::wstring legacyText =
+        std::wstring(L"# SyncStick Portable\n\n[device.TEST]\nname=测试电脑\n\n") +
+        L"[rule.TEST.1]\nname=旧规则\npc=" + folderRule.pcPath +
+        L"\nusb=旧目录\\项目\nkind=folder\nmode=both\nenabled=1\n";
+    Check(WriteText(legacyPath, ToUtf8(legacyText)), "legacy config written");
+    ss::AppConfig migrated;
+    Check(ss::LoadConfig(legacyPath, migrated, error), "legacy config loads");
+    Check(migrated.ruleSets.size() == 1, "legacy rules migrate into one rule set");
+    if (migrated.ruleSets.size() == 1) {
+        const ss::RuleSet& migratedSet = migrated.ruleSets[0];
+        Check(migratedSet.name == L"测试电脑", "migrated rule set takes device name");
+        Check(migratedSet.rules.size() == 1 && migratedSet.rules[0].name == L"旧规则",
+              "migration keeps rules");
+        Check(migrated.activeRuleSetId == migratedSet.id, "migration activates the rule set");
+        ss::DeviceRules* migratedDevice = migrated.FindDevice(L"TEST");
+        Check(migratedDevice != nullptr && migratedDevice->lastRuleSetId == migratedSet.id,
+              "migration records per-device last rule set");
+        std::wstring migratedPath = ss::JoinPath(root, L"migrated.ini");
+        Check(ss::SaveConfig(migratedPath, migrated, error), "migrated config saves");
+        ss::AppConfig reloaded;
+        Check(ss::LoadConfig(migratedPath, reloaded, error), "migrated config reloads");
+        Check(reloaded.ruleSets.size() == 1 && reloaded.ruleSets[0].rules.size() == 1 &&
+                  reloaded.ruleSets[0].rules[0].name == L"旧规则",
+              "migration survives save and reload");
+        std::string migratedText = ReadText(migratedPath);
+        Check(migratedText.find("[rule.TEST.") == std::string::npos,
+              "migrated config writes no legacy sections");
     }
 
     std::wcout << L"\n" << checks - failures << L"/" << checks << L" checks passed\n";

@@ -267,6 +267,27 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Margin="0,0,18,0">
+                                        <TextBlock FontSize="12.5" FontWeight="SemiBold" Text="插入时选择规则" />
+                                        <TextBlock Margin="0,3,0,0"
+                                                   FontSize="10.5"
+                                                   Foreground="{StaticResource InkSoftBrush}"
+                                                   Text="有多个规则时，插入目标 U 盘后先选择要同步哪一套；关掉后自动使用这块设备上次用过的规则。"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <ToggleButton AutomationProperties.Name="插入时选择规则" Grid.Column="1"
+                                                  VerticalAlignment="Center"
+                                                  IsChecked="{Binding AskRuleOnInsert, Mode=TwoWay}"
+                                                  Style="{StaticResource ToggleSwitch}" />
+                                </Grid>
+
+                                <Border Margin="0,14,0,0" Style="{StaticResource Hairline}" />
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,18,0">
                                         <TextBlock FontSize="12.5" FontWeight="SemiBold" Text="启动时同步已连接的设备" />
                                         <TextBlock Margin="0,3,0,0"
                                                    FontSize="10.5"

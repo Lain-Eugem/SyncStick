@@ -1,4 +1,4 @@
-﻿using SyncStick.Core;
+using SyncStick.Core;
 using SyncStick.Core.Models;
 using SyncStick.Core.Services;
 
@@ -35,6 +35,7 @@ public sealed class SyncCoordinator : IDisposable
     private bool _autoSyncDoneForConnection;
     private bool _launchAutoScheduled;
     private int _polling;
+    private int _ruleSelectionPending;
 
     public SyncCoordinator(
         SettingsStore settingsStore,
@@ -59,7 +60,23 @@ public sealed class SyncCoordinator : IDisposable
 
     public event EventHandler<NoticeEventArgs>? Notice;
 
+    /// <summary>
+    /// Raised when the user should pick a rule set before an automatic sync.
+    /// Subscribe and call <see cref="CompleteRuleSelection"/> or
+    /// <see cref="CancelRuleSelection"/> when the choice is made.
+    /// </summary>
+    public event EventHandler<RuleSelectionRequestedEventArgs>? RuleSelectionRequested;
+
     public AppSettings Settings { get; }
+
+    public IReadOnlyList<SyncRule> Rules => Settings.Rules;
+
+    public SyncRule ActiveRule =>
+        Settings.Rules.FirstOrDefault(rule =>
+            string.Equals(rule.Id, Settings.ActiveRuleId, StringComparison.Ordinal))
+        ?? Settings.Rules[0];
+
+    public bool IsRuleSelectionPending => Volatile.Read(ref _ruleSelectionPending) == 1;
 
     public IReadOnlyList<VolumeInfo> Volumes => _volumes;
 
@@ -97,10 +114,14 @@ public sealed class SyncCoordinator : IDisposable
             && Settings.AutoSyncEnabled
             && Settings.AutoSyncOnLaunch
             && !_launchAutoScheduled
-            && HasEnabledSources())
+            && HasAnyEnabledSources())
         {
             _launchAutoScheduled = true;
-            ScheduleAutoSync(launch: true, trigger: "启动时同步");
+            if (!TryRequestRuleSelection("启动时同步"))
+            {
+                ApplyPreferredRuleForAutoSync();
+                ScheduleAutoSync(launch: true, trigger: "启动时同步");
+            }
         }
     }
 
@@ -159,6 +180,158 @@ public sealed class SyncCoordinator : IDisposable
         }
 
         TrySaveSettings(out _);
+        RaiseStateChanged();
+    }
+
+    public void SetAskRuleOnInsert(bool enabled)
+    {
+        if (Settings.AskRuleOnInsert == enabled)
+        {
+            return;
+        }
+
+        Settings.AskRuleOnInsert = enabled;
+        if (!enabled)
+        {
+            CancelRuleSelection();
+        }
+
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+    }
+
+    public SyncRule AddRule(string? name = null)
+    {
+        var rule = new SyncRule
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "新规则" : name.Trim(),
+            UpdatedAt = DateTimeOffset.Now
+        };
+        Settings.Rules.Add(rule);
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+        return rule;
+    }
+
+    public SyncRule? DuplicateRule(string ruleId, string? name = null)
+    {
+        var source = FindRule(ruleId);
+        if (source is null)
+        {
+            return null;
+        }
+
+        var copy = source.Clone(
+            string.IsNullOrWhiteSpace(name) ? source.Name + " 副本" : name.Trim(),
+            regenerateSourceIds: true);
+        Settings.Rules.Add(copy);
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+        return copy;
+    }
+
+    public bool RenameRule(string ruleId, string? name)
+    {
+        var rule = FindRule(ruleId);
+        if (rule is null || string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var trimmed = name.Trim();
+        if (string.Equals(rule.Name, trimmed, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        rule.Name = trimmed;
+        rule.UpdatedAt = DateTimeOffset.Now;
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+        return true;
+    }
+
+    public bool ActivateRule(string ruleId)
+    {
+        var rule = FindRule(ruleId);
+        if (rule is null)
+        {
+            return false;
+        }
+
+        Settings.ActiveRuleId = rule.Id;
+        Settings.Sources = rule.Sources;
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+        return true;
+    }
+
+    public bool DeleteRule(string ruleId)
+    {
+        if (Settings.Rules.Count <= 1)
+        {
+            return false;
+        }
+
+        var rule = FindRule(ruleId);
+        if (rule is null)
+        {
+            return false;
+        }
+
+        Settings.Rules.Remove(rule);
+        if (string.Equals(Settings.ActiveRuleId, rule.Id, StringComparison.Ordinal))
+        {
+            Settings.ActiveRuleId = Settings.Rules[0].Id;
+            Settings.Sources = Settings.Rules[0].Sources;
+        }
+
+        if (Settings.TargetDevice is not null
+            && string.Equals(Settings.TargetDevice.LastRuleId, rule.Id, StringComparison.Ordinal))
+        {
+            Settings.TargetDevice.LastRuleId = null;
+        }
+
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Called by the UI after the user picked a rule in the insert-time picker.
+    /// Activates the rule, remembers it for the current device and clears the
+    /// pending state. The caller then starts the sync.
+    /// </summary>
+    public void CompleteRuleSelection(string? ruleId)
+    {
+        var rule = string.IsNullOrWhiteSpace(ruleId) ? null : FindRule(ruleId);
+        if (rule is null)
+        {
+            CancelRuleSelection();
+            return;
+        }
+
+        Interlocked.Exchange(ref _ruleSelectionPending, 0);
+        Settings.ActiveRuleId = rule.Id;
+        Settings.Sources = rule.Sources;
+        if (Settings.TargetDevice is not null)
+        {
+            Settings.TargetDevice.LastRuleId = rule.Id;
+        }
+
+        TrySaveSettings(out _);
+        _autoSyncDoneForConnection = true;
+        RaiseStateChanged();
+    }
+
+    public void CancelRuleSelection()
+    {
+        if (Interlocked.Exchange(ref _ruleSelectionPending, 0) == 0)
+        {
+            return;
+        }
+
+        _autoSyncDoneForConnection = true;
         RaiseStateChanged();
     }
 
@@ -267,6 +440,7 @@ public sealed class SyncCoordinator : IDisposable
                 Settings.TargetDevice.LastDriveLetter = device.DriveLetter;
                 Settings.TargetDevice.Label = device.Label;
                 Settings.TargetDevice.FileSystem = device.FileSystem;
+                Settings.TargetDevice.LastRuleId = Settings.ActiveRuleId;
                 TrySaveSettings(out _);
             }
 
@@ -350,6 +524,7 @@ public sealed class SyncCoordinator : IDisposable
         _disposed = true;
         _pollTimer.Dispose();
         CancelPendingAutoSync();
+        CancelRuleSelection();
         _syncCts?.Cancel();
         _syncCts?.Dispose();
         _syncCts = null;
@@ -424,6 +599,18 @@ public sealed class SyncCoordinator : IDisposable
             return;
         }
 
+        if (!HasAnyEnabledSources())
+        {
+            RaiseNotice("U 盘已连接，但还没有选择要同步的内容。");
+            return;
+        }
+
+        if (TryRequestRuleSelection("插入 U 盘"))
+        {
+            return;
+        }
+
+        ApplyPreferredRuleForAutoSync();
         if (!HasEnabledSources())
         {
             RaiseNotice("U 盘已连接，但还没有选择要同步的内容。");
@@ -515,6 +702,84 @@ public sealed class SyncCoordinator : IDisposable
     }
 
     private bool HasEnabledSources() => Settings.Sources.Any(source => source.Enabled);
+
+    private bool HasAnyEnabledSources() =>
+        Settings.Rules.Any(rule => rule.Sources.Any(source => source.Enabled));
+
+    private SyncRule? FindRule(string? ruleId)
+    {
+        if (string.IsNullOrWhiteSpace(ruleId))
+        {
+            return null;
+        }
+
+        return Settings.Rules.FirstOrDefault(rule =>
+            string.Equals(rule.Id, ruleId, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Raises <see cref="RuleSelectionRequested"/> when the user should pick a
+    /// rule set. Returns true when an existing or new prompt is pending.
+    /// </summary>
+    private bool TryRequestRuleSelection(string trigger)
+    {
+        if (!Settings.AskRuleOnInsert || Settings.Rules.Count <= 1)
+        {
+            return false;
+        }
+
+        if (!HasAnyEnabledSources())
+        {
+            return false;
+        }
+
+        if (Interlocked.Exchange(ref _ruleSelectionPending, 1) == 1)
+        {
+            return true;
+        }
+
+        _autoSyncDoneForConnection = true;
+        var rules = Settings.Rules.ToList();
+        var activeRuleId = Settings.ActiveRuleId;
+        var lastRuleId = Settings.TargetDevice?.LastRuleId;
+        try
+        {
+            RuleSelectionRequested?.Invoke(
+                this,
+                new RuleSelectionRequestedEventArgs(rules, activeRuleId, lastRuleId, trigger));
+        }
+        catch (Exception)
+        {
+            // A UI subscriber must never break device polling.
+        }
+
+        RaiseStateChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the rule last used with this device (or the active rule) before
+    /// an automatic sync when no insert-time prompt is needed.
+    /// </summary>
+    private void ApplyPreferredRuleForAutoSync()
+    {
+        if (Settings.Rules.Count <= 1)
+        {
+            return;
+        }
+
+        var preferred = FindRule(Settings.TargetDevice?.LastRuleId);
+        if (preferred is null
+            || string.Equals(Settings.ActiveRuleId, preferred.Id, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Settings.ActiveRuleId = preferred.Id;
+        Settings.Sources = preferred.Sources;
+        TrySaveSettings(out _);
+        RaiseStateChanged();
+    }
 
     private void SetProgress(SyncProgress progress)
     {

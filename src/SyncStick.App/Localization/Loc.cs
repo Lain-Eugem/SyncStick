@@ -90,6 +90,12 @@ public static class Loc
     /// <summary>Translates a display string when the UI is English; otherwise returns it unchanged.</summary>
     public static string T(string? text) => Translate(text, 0);
 
+    /// <summary>Display name for a rule set; the migrated default set has a Chinese storage name.</summary>
+    public static string RuleName(string? name)
+        => IsEnglish && name is "默认规则" or "新规则"
+            ? (name == "默认规则" ? "Default rule" : "New rule")
+            : name ?? string.Empty;
+
     /// <summary>Formats a Chinese copy template after translating it (used when a template needs arguments).</summary>
     public static string F(string template, params object?[] args)
         => string.Format(Culture, T(template), args);
