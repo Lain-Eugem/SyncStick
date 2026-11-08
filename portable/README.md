@@ -1,6 +1,6 @@
 # SyncStick Portable
 
-放在 U 盘里的双向同步小工具。插上 U 盘，双击一次，程序会自动识别当前电脑，把规则里指定的文件夹或文件在电脑与 U 盘之间同步。原生 C++/Win32，单文件 exe，不需要 .NET、不需要安装、不需要管理员权限。
+放在 U 盘里的双向同步小工具。插上 U 盘，双击一次，程序会自动识别当前电脑，把规则里指定的文件夹或文件在电脑与 U 盘之间同步。原生 C++/Win32，单文件 exe，不需要 .NET、不需要安装、不需要管理员权限。支持简体中文 / English 界面，首次运行跟随系统语言，也可以在右上角切换。
 
 ![SyncStick Portable 主界面](docs/screenshots/portable-main.png)
 
@@ -43,6 +43,7 @@ Windows 10/11 禁止 U 盘里的 EXE 静默自启，`autorun.inf` 只能设置�
 - 如果检测到桌面版 SyncStick 正在运行，便携版会暂停自动同步并提示先退出桌面版，避免两个程序同时写同一支 U 盘。
 - 添加规则时才创建配置文件与日志（`SyncStickPortable.ini`、`SyncStickPortable.log`），不联网、不上传。
 - 日志里记录每次同步的开始、复制方向、完成摘要和冲突。
+- 中文 / English 界面：右上角一键切换，选择写入 `SyncStickPortable.ini` 的 `language=`；也可用 `--lang zh|en` 临时指定。
 
 ## 运行
 

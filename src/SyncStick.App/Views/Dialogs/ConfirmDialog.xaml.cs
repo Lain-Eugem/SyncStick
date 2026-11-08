@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using SyncStick.App.Localization;
 
 namespace SyncStick.App.Views.Dialogs;
 
@@ -22,6 +23,7 @@ public partial class ConfirmDialog : Window
         }
 
         WireDrag();
+        VisualLocalizer.Attach(this);
     }
 
     public ConfirmDialog(string title, string message, string confirmText)
@@ -36,6 +38,7 @@ public partial class ConfirmDialog : Window
         DialogIconPath.Stroke = (Brush)FindResource("AccentDeepBrush");
 
         WireDrag();
+        VisualLocalizer.Attach(this);
     }
 
     private void ApplyContent(string title, string message, string confirmText)

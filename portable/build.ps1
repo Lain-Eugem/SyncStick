@@ -56,6 +56,7 @@ New-Item -ItemType Directory -Force -Path $package | Out-Null
 Copy-Item (Join-Path $build 'SyncStickPortable.exe') $package
 Copy-Item (Join-Path $root 'packaging\autorun.inf') $package
 Copy-Item (Join-Path $root 'packaging\说明.txt') $package
+Copy-Item (Join-Path $root 'packaging\说明-EN.txt') $package
 Copy-Item (Join-Path $root 'README.md') $package
 Copy-Item -Recurse (Join-Path $root 'docs') $package
 

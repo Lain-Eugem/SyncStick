@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using SyncStick.App.Infrastructure;
+using SyncStick.App.Localization;
 using SyncStick.Core;
 using SyncStick.Core.Models;
 
@@ -68,9 +69,9 @@ public sealed class SourceRowViewModel : ObservableObject
         }
     }
 
-    public string DestinationPlaceholder => IsFolder ? $"默认：{Name}" : "U 盘根目录";
+    public string DestinationPlaceholder => IsFolder ? Loc.F("默认：{0}", Name) : Loc.T("U 盘根目录");
 
-    public string DestinationTitle => IsFolder ? "写入到" : "写入到";
+    public string DestinationTitle => Loc.T("写入到");
 
     public string DestinationHint
     {
@@ -81,14 +82,16 @@ public sealed class SourceRowViewModel : ObservableObject
                 var normalized = PathGuard.NormalizeSubfolder(Source.DestinationSubfolder);
                 if (string.IsNullOrEmpty(normalized))
                 {
-                    return IsFolder ? $"{_owner.TargetDriveHint}\\{Name}\\" : $"{_owner.TargetDriveHint}\\";
+                    return IsFolder
+                        ? $"{_owner.TargetDriveHint}\\{Name}\\"
+                        : $"{_owner.TargetDriveHint}\\";
                 }
 
                 return $"{_owner.TargetDriveHint}\\{normalized}";
             }
             catch (FormatException)
             {
-                return "目标子目录无效";
+                return Loc.T("目标子目录无效");
             }
         }
     }

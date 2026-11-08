@@ -1,0 +1,71 @@
+SyncStick 1.0.4 · Automatic USB sync
+====================================
+
+1. Run
+------
+Double-click SyncStick.exe in this folder.
+Do not copy the exe by itself: the DLLs and JSON files next to it must stay together.
+
+Requirements: Windows 10/11 x64 with the .NET 10 Desktop Runtime (x64).
+Download it here if it is not installed:
+https://dotnet.microsoft.com/download/dotnet/10.0
+
+If Windows SmartScreen appears, choose "More info" → "Run anyway".
+The app is not code-signed; this is the usual prompt for an unknown publisher.
+
+2. First run
+------------
+1. Open "Sources" and add the folders or files you want to follow.
+2. Plug in the USB drive, open "Target device", and click "Set as target".
+   If a USB hard drive does not appear, enable "Other drives" at the bottom.
+3. Return to "Dashboard". With "Auto sync" enabled, every future insert of
+   this USB drive will compare both sides and write changed files.
+
+3. Overwrite and destination
+----------------------------
+The default is "Smart overwrite": only new or changed files are written,
+and same-name files on the USB drive are overwritten. Directories you did
+not select are never deleted unless you enable "Mirror clean" in Settings.
+
+Each sync item has its own "USB destination":
+- Blank: a folder is written under its own name at the USB root; a file goes directly to the root.
+- Relative path: for example "MyProject\Docs" writes into that folder under the USB root.
+- Folder button: when the target USB drive is connected, pick a folder directly on it.
+  You can create a new folder in the picker if needed.
+Before enabling mirror clean, verify the "USB destination" of every item.
+
+4. Exit and startup
+-------------------
+Closing the window minimizes it to the notification area by default; the app
+keeps listening. Right-click the tray icon to open, sync now, or exit.
+
+Windows 11 may put new icons in the ^ overflow area. Click ^ to find it, or
+drag the SyncStick icon onto the taskbar to pin it. If the icon still does not
+appear after startup, double-click SyncStick.exe again to bring back the window.
+
+To start with Windows: first put the whole SyncStick folder in a fixed place,
+then enable "Start with Windows" in Settings. Toggle it again if you move the folder.
+
+Startup registration tries the current user's Run key first. If that is blocked,
+it falls back to a shortcut in the Startup folder. If both fail, the app explains
+how to relaunch SyncStick.exe from File Explorer and retry. Programs launched by
+a sandbox or with restricted permissions are not allowed to write startup entries.
+
+5. Interface language
+---------------------
+SyncStick supports Simplified Chinese and English.
+Open Settings and use the "Interface language / LANGUAGE" card to choose
+"Follow system", "中文", or "English", then restart SyncStick.
+The default follows the operating system: Chinese systems show Chinese,
+other systems show English. You can also pass --lang zh or --lang en on the
+command line to override the language for that run. Changing the language
+never changes sync rules, paths, or activity history.
+
+6. Data locations
+-----------------
+%APPDATA%\SyncStick\settings.json   configuration
+%APPDATA%\SyncStick\activity.json   last 60 sync records
+%APPDATA%\SyncStick\logs\           error logs
+
+SyncStick never connects to the internet, never uploads files, and does not
+require administrator rights.

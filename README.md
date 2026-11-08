@@ -2,12 +2,16 @@
 
 把电脑上指定的文件或文件夹，在插入指定 U 盘时自动写入或覆盖。
 
+[中文](README.md) · [English](README.en.md)
+
 仓库包含两个版本：
 
 | 版本 | 适用场景 | 实现 |
 | --- | --- | --- |
-| 桌面版 1.0.3 | 电脑配置正常，希望 U 盘保持干净 | WPF / .NET 10，常驻托盘，插入后自动同步 |
-| 便携版 1.0.1 | 电脑配置较低，或不想安装 .NET 运行时 | 原生 C++ / Win32，单文件放在 U 盘里，双击一次运行 |
+| 桌面版 1.0.4 | 电脑配置正常，希望 U 盘保持干净 | WPF / .NET 10，常驻托盘，插入后自动同步 |
+| 便携版 1.0.2 | 电脑配置较低，或不想安装 .NET 运行时 | 原生 C++ / Win32，单文件放在 U 盘里，双击一次运行 |
+
+桌面版和便携版都支持中文 / English 界面；语言可在界面或程序目录的配置里选择。
 
 ![桌面版总览](docs/screenshots/dashboard.png)
 
@@ -25,6 +29,7 @@
 - 支持取消、拔盘、空间不足、来源缺失等错误提示。
 - 最近 60 次活动记录，托盘后台运行，可设置开机启动。
 - 固定磁盘型的 USB 硬盘可以在“其他驱动器”中选用。
+- 中文 / English 界面，可在“设置”里切换；标题样式文字不含句号。
 
 ### 便携版
 
@@ -34,6 +39,7 @@
 - 不做删除操作，不会因为同步清空 U 盘。
 - U 盘内目标位置支持相对路径，也可以直接浏览选择文件夹。
 - 检测到桌面版正在运行时暂停自动同步，避免两个程序同时写同一支 U 盘。
+- 中文 / English 界面，首次运行按系统语言选择，也可以手动切换。
 
 ## 目录结构
 
@@ -54,7 +60,8 @@ SyncStick/
 ├─ Directory.Build.props
 ├─ SyncStick.sln
 ├─ LICENSE
-└─ README.md
+├─ README.md            # 中文说明
+└─ README.en.md         # 英文说明
 ```
 
 ## 构建
@@ -91,8 +98,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File portable/build.ps1
 
 `release/` 中放着已验证的压缩包：
 
-- `SyncStick-1.0.3-win-x64.zip`：桌面版，解压后运行 `SyncStick.exe`。
-- `SyncStickPortable-1.0.1.zip`：便携版，解压到 U 盘根目录，双击 `SyncStickPortable.exe`。
+- `SyncStick-1.0.4-win-x64.zip`：桌面版，解压后运行 `SyncStick.exe`。
+- `SyncStickPortable-1.0.2.zip`：便携版，解压到 U 盘根目录，双击 `SyncStickPortable.exe`。
 - `SHA256SUMS.txt`：上面两个文件的 SHA-256。
 
 ## 已知限制

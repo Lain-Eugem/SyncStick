@@ -31,6 +31,7 @@ struct DeviceRules {
 
 struct AppConfig {
     std::vector<DeviceRules> devices;
+    std::wstring language;  // L"zh", L"en", or empty when the language is not pinned yet
 
     DeviceRules* FindDevice(const std::wstring& id);
     const DeviceRules* FindDevice(const std::wstring& id) const;
@@ -100,6 +101,7 @@ std::wstring ReadMachineGuid();
 std::wstring GetConfigPath();
 bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error);
 bool SaveConfig(const std::wstring& path, const AppConfig& config, std::wstring& error);
+std::wstring ReadStoredLanguage(const std::wstring& path);
 std::wstring ResolvePortablePath(const std::wstring& value, const std::wstring& appDir);
 std::wstring MakePortablePath(const std::wstring& value, const std::wstring& appDir);
 std::wstring DefaultUsbRulePath(const std::wstring& appDir, const std::wstring& deviceName,
@@ -110,6 +112,9 @@ std::wstring DefaultUsbRulePath(const std::wstring& appDir, const std::wstring& 
 bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
                 const std::wstring& logPath, SyncProgress* progress,
                 SyncStats& stats);
+// Builds the localized one-line summary shown after a sync run. Kept separate
+// so the UI can rebuild it after a language switch.
+std::wstring BuildSummary(const SyncStats& stats);
 
 std::wstring DirectionLabel(const std::wstring& mode);
 

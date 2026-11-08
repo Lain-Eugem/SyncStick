@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using SyncStick.App.Localization;
 
 namespace SyncStick.App.Services;
 
@@ -195,7 +196,12 @@ public static class AutoStartService
                 shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { executable });
                 shortcutType.InvokeMember("Arguments", BindingFlags.SetProperty, null, shortcut, new object[] { "--minimized" });
                 shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(executable) ?? string.Empty });
-                shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { "SyncStick 开机自动同步" });
+                shortcutType.InvokeMember(
+                "Description",
+                BindingFlags.SetProperty,
+                null,
+                shortcut,
+                new object[] { Loc.IsEnglish ? "SyncStick auto-sync at sign-in" : "SyncStick 开机自动同步" });
                 shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { executable + ",0" });
                 shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
             }

@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using SyncStick.App.Controls;
 using SyncStick.App.Infrastructure;
+using SyncStick.App.Localization;
 using SyncStick.App.Services;
 using SyncStick.Core;
 using SyncStick.Core.Models;
@@ -137,7 +138,7 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsSettingsPage => CurrentPageKey == "settings";
 
-    public string TodayText => DateTime.Now.ToString("M 月 d 日 · dddd");
+    public string TodayText => Loc.TodayText();
 
     // --------------------------------------------------------------- toasts
 
@@ -169,7 +170,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void ShowToast(string message, bool isError = false)
     {
-        ToastMessage = message;
+        ToastMessage = Loc.T(message);
         IsToastError = isError;
         IsToastVisible = true;
         _toastTimer.Stop();
@@ -202,7 +203,13 @@ public sealed class MainViewModel : ObservableObject
             var names = Settings.Sources.Select(source => source.Name).ToList();
             if (names.Count == 0)
             {
-                return "文件或文件夹";
+                return Loc.IsEnglish ? "Files or folders" : "文件或文件夹";
+            }
+
+            if (Loc.IsEnglish)
+            {
+                var headEn = string.Join(", ", names.Take(2));
+                return names.Count > 2 ? $"{headEn} and {names.Count - 2} more" : headEn;
             }
 
             var head = string.Join("、", names.Take(2));
@@ -210,11 +217,11 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public string TargetLabel => ConnectedTarget?.DisplayLabel ?? Settings.TargetDevice?.DisplayLabel ?? "目标 U 盘";
+    public string TargetLabel => ConnectedTarget?.DisplayLabel ?? Settings.TargetDevice?.DisplayLabel ?? Loc.T("目标 U 盘");
 
-    public string TargetLetter => ConnectedTarget?.DriveLetter ?? Settings.TargetDevice?.LastDriveLetter ?? "U 盘";
+    public string TargetLetter => ConnectedTarget?.DriveLetter ?? Settings.TargetDevice?.LastDriveLetter ?? Loc.T("U 盘");
 
-    public string TargetDriveHint => TargetConnected || HasTarget ? TargetLetter : "U 盘";
+    public string TargetDriveHint => TargetConnected || HasTarget ? TargetLetter : Loc.T("U 盘");
 
     public string TargetFreeText => ConnectedTarget is null
         ? "未连接"
@@ -823,6 +830,68 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    // ------------------------------------------------------------- language
+
+    public bool UiLanguageIsSystem
+    {
+        get => string.Equals(Settings.UiLanguage, "system", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                SetUiLanguage("system");
+            }
+        }
+    }
+
+    public bool UiLanguageIsChinese
+    {
+        get => string.Equals(Settings.UiLanguage, "zh", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                SetUiLanguage("zh");
+            }
+        }
+    }
+
+    public bool UiLanguageIsEnglish
+    {
+        get => string.Equals(Settings.UiLanguage, "en", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                SetUiLanguage("en");
+            }
+        }
+    }
+
+    private void SetUiLanguage(string language)
+    {
+        var normalized = language switch
+        {
+            "zh" => "zh",
+            "en" => "en",
+            _ => "system"
+        };
+
+        if (string.Equals(Settings.UiLanguage, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Settings.UiLanguage = normalized;
+        PersistSettings();
+        OnPropertyChanged(nameof(UiLanguageIsSystem));
+        OnPropertyChanged(nameof(UiLanguageIsChinese));
+        OnPropertyChanged(nameof(UiLanguageIsEnglish));
+        ShowToast(Loc.IsEnglish
+            ? "Language saved. Restart SyncStick to apply."
+            : "语言已保存，重启 SyncStick 后生效。");
+    }
+
     private static void ShowStartupRestrictionHelp(Exception error)
     {
         var programFolder = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -830,34 +899,52 @@ public sealed class MainViewModel : ObservableObject
         var developmentHost = error.Message.Contains("发布为独立的", StringComparison.Ordinal);
 
         var reason = developmentHost
-            ? "当前是以开发方式运行的，开机启动只支持发布后的 SyncStick.exe。"
-            : "系统拒绝了开机启动项。SyncStick 尝试写入当前用户的启动项，也尝试了启动文件夹里的快捷方式。";
+            ? Loc.IsEnglish
+                ? "SyncStick is running as a development build. Start with Windows is only supported from the published SyncStick.exe."
+                : "当前是以开发方式运行的，开机启动只支持发布后的 SyncStick.exe。"
+            : Loc.IsEnglish
+                ? "Windows rejected the startup entry. SyncStick tried the current user's startup registry key and also a shortcut in the Startup folder."
+                : "系统拒绝了开机启动项。SyncStick 尝试写入当前用户的启动项，也尝试了启动文件夹里的快捷方式。";
 
         var steps = developmentHost
-            ? "请从发布目录（dist\\SyncStick）运行 SyncStick.exe，再回到“设置”打开“开机自动启动”。"
-            : "这通常发生在程序被沙箱、安全软件或系统策略限制时。可以这样重试：" +
-              Environment.NewLine +
-              "1. 在资源管理器里打开程序所在文件夹；" +
-              Environment.NewLine +
-              "2. 双击 SyncStick.exe 重新运行；" +
-              Environment.NewLine +
-              "3. 回到“设置”，再打开“开机自动启动”。";
+            ? Loc.IsEnglish
+                ? "Run SyncStick.exe from the publish folder (dist\\SyncStick), then turn on “Start with Windows” again in Settings."
+                : "请从发布目录（dist\\SyncStick）运行 SyncStick.exe，再回到“设置”打开“开机自动启动”。"
+            : Loc.IsEnglish
+                ? "This usually happens when the app is limited by a sandbox, security software or a system policy. Try again like this:" +
+                  Environment.NewLine +
+                  "1. Open the program folder in File Explorer" +
+                  Environment.NewLine +
+                  "2. Run SyncStick.exe again" +
+                  Environment.NewLine +
+                  "3. Return to Settings and turn on “Start with Windows” again"
+                : "这通常发生在程序被沙箱、安全软件或系统策略限制时。可以这样重试：" +
+                  Environment.NewLine +
+                  "1. 在资源管理器里打开程序所在文件夹；" +
+                  Environment.NewLine +
+                  "2. 双击 SyncStick.exe 重新运行；" +
+                  Environment.NewLine +
+                  "3. 回到“设置”，再打开“开机自动启动”。";
 
         var manualFallback = developmentHost
             ? string.Empty
-            : Environment.NewLine + Environment.NewLine +
-              "如果仍然失败，可以手动把 SyncStick 的快捷方式放进启动文件夹：" +
-              Environment.NewLine + startupFolder;
+            : Loc.IsEnglish
+                ? Environment.NewLine + Environment.NewLine +
+                  "If it still fails, put a shortcut to SyncStick in the Startup folder yourself:" +
+                  Environment.NewLine + startupFolder
+                : Environment.NewLine + Environment.NewLine +
+                  "如果仍然失败，可以手动把 SyncStick 的快捷方式放进启动文件夹：" +
+                  Environment.NewLine + startupFolder;
 
         DialogService.Info(
-            "开机启动没有设置成功",
+            Loc.IsEnglish ? "Could not enable start with Windows" : "开机启动没有设置成功",
             reason +
             Environment.NewLine + Environment.NewLine +
             steps +
             manualFallback +
             Environment.NewLine + Environment.NewLine +
-            "当前程序目录：" + programFolder,
-            "知道了");
+            (Loc.IsEnglish ? "Current program folder: " : "当前程序目录：") + programFolder,
+            Loc.IsEnglish ? "Got it" : "知道了");
     }
 
     public string DataDirectoryText => _coordinator.DataDirectory;
@@ -996,7 +1083,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "选择要同步的文件夹",
+            Title = Loc.T("选择要同步的文件夹"),
             Multiselect = true
         };
 
@@ -1010,10 +1097,10 @@ public sealed class MainViewModel : ObservableObject
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择要同步的文件",
+            Title = Loc.T("选择要同步的文件"),
             Multiselect = true,
             CheckFileExists = true,
-            Filter = "所有文件 (*.*)|*.*"
+            Filter = Loc.IsEnglish ? "All files (*.*)|*.*" : "所有文件 (*.*)|*.*"
         };
 
         if (dialog.ShowDialog() == true)
@@ -1038,7 +1125,7 @@ public sealed class MainViewModel : ObservableObject
         var rootNoSlash = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "选择 U 盘上的写入文件夹",
+            Description = Loc.T("选择 U 盘上的写入文件夹"),
             UseDescriptionForTitle = true,
             SelectedPath = root,
             ShowNewFolderButton = true
@@ -1370,19 +1457,5 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private static string FormatWhen(DateTime local)
-    {
-        var today = DateTime.Today;
-        if (local.Date == today)
-        {
-            return "今天 " + local.ToString("HH:mm");
-        }
-
-        if (local.Date == today.AddDays(-1))
-        {
-            return "昨天 " + local.ToString("HH:mm");
-        }
-
-        return local.ToString("M 月 d 日 HH:mm");
-    }
+    private static string FormatWhen(DateTime local) => Loc.FormatWhen(local);
 }

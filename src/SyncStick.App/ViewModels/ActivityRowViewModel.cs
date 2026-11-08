@@ -1,3 +1,4 @@
+using SyncStick.App.Localization;
 using SyncStick.Core;
 using SyncStick.Core.Models;
 
@@ -14,23 +15,9 @@ public sealed class ActivityRowViewModel
 
     public string TimeText => Record.StartedAt.LocalDateTime.ToString("HH:mm");
 
-    public string FeedTimeText
-    {
-        get
-        {
-            var local = Record.StartedAt.LocalDateTime;
-            if (local.Date == DateTime.Today)
-            {
-                return local.ToString("HH:mm");
-            }
+    public string FeedTimeText => Loc.FormatFeedTime(Record.StartedAt.LocalDateTime);
 
-            return local.Date == DateTime.Today.AddDays(-1)
-                ? "昨天"
-                : local.ToString("MM-dd");
-        }
-    }
-
-    public string DateText => Record.StartedAt.LocalDateTime.ToString("MM月dd日");
+    public string DateText => Loc.FormatActivityDate(Record.StartedAt.LocalDateTime);
 
     public string FullTimeText => Record.StartedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 

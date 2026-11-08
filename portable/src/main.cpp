@@ -1,5 +1,6 @@
 #define _WIN32_WINNT 0x0A00
 #include "core.h"
+#include "i18n.h"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -234,6 +235,7 @@ enum HitKind {
     HitSync,
     HitAdd,
     HitLog,
+    HitLanguage,
     HitCancel,
     HitRuleOpen,
     HitRuleToggle,
@@ -321,9 +323,9 @@ bool BrowseForPath(HWND parent, bool folder, std::wstring& result,
     if (title != nullptr) {
         dialog->SetTitle(title);
     } else if (folder) {
-        dialog->SetTitle(L"选择电脑上的文件夹");
+        dialog->SetTitle(ss::T(L"选择电脑上的文件夹").c_str());
     } else {
-        dialog->SetTitle(L"选择电脑上的文件");
+        dialog->SetTitle(ss::T(L"选择电脑上的文件").c_str());
     }
     HRESULT shown = dialog->Show(parent);
     if (SUCCEEDED(shown)) {
@@ -392,14 +394,14 @@ void CreateRuleControls(RuleDialogState* state) {
                                         nullptr);
     SetDialogControlFont(state->titleLabel, state->fonts.h2);
 
-    label(L"名称", 28, 68, 300, 20);
+    label(ss::T(L"名称").c_str(), 28, 68, 300, 20);
     state->name = edit(kIdName, state->rule.name, 28, 88, 500);
 
-    label(L"电脑上的文件或文件夹", 28, 138, 380, 20);
+    label(ss::T(L"电脑上的文件或文件夹").c_str(), 28, 138, 380, 20);
     state->pc = edit(kIdPc, state->rule.pcPath, 28, 158, 430);
-    button(kIdBrowse, L"浏览…", 468, 158, 84, false);
+    button(kIdBrowse, ss::T(L"浏览…").c_str(), 468, 158, 84, false);
 
-    label(L"类型", 28, 208, 100, 20);
+    label(ss::T(L"类型").c_str(), 28, 208, 100, 20);
     state->kind = CreateWindowExW(0, L"COMBOBOX", nullptr,
                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST |
                                       WS_VSCROLL,
@@ -407,12 +409,14 @@ void CreateRuleControls(RuleDialogState* state) {
                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdKind)),
                                   GetModuleHandleW(nullptr), nullptr);
     SetDialogControlFont(state->kind, state->fonts.body);
-    SendMessageW(state->kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"文件夹"));
-    SendMessageW(state->kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"单个文件"));
+    SendMessageW(state->kind, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(ss::T(L"文件夹").c_str()));
+    SendMessageW(state->kind, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(ss::T(L"单个文件").c_str()));
     SendMessageW(state->kind, CB_SETCURSEL,
                  state->rule.kind == L"file" ? 1 : 0, 0);
 
-    label(L"同步方向", 198, 208, 140, 20);
+    label(ss::T(L"同步方向").c_str(), 198, 208, 140, 20);
     state->mode = CreateWindowExW(0, L"COMBOBOX", nullptr,
                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST |
                                       WS_VSCROLL,
@@ -420,27 +424,31 @@ void CreateRuleControls(RuleDialogState* state) {
                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMode)),
                                   GetModuleHandleW(nullptr), nullptr);
     SetDialogControlFont(state->mode, state->fonts.body);
-    SendMessageW(state->mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"双向同步"));
-    SendMessageW(state->mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"电脑 → U 盘"));
-    SendMessageW(state->mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"U 盘 → 电脑"));
+    SendMessageW(state->mode, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(ss::T(L"双向同步").c_str()));
+    SendMessageW(state->mode, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(ss::T(L"电脑 → U 盘").c_str()));
+    SendMessageW(state->mode, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(ss::T(L"U 盘 → 电脑").c_str()));
     int modeIndex = state->rule.mode == L"pc2usb" ? 1 : (state->rule.mode == L"usb2pc" ? 2 : 0);
     SendMessageW(state->mode, CB_SETCURSEL, modeIndex, 0);
 
-    label(L"U 盘内位置（可填子文件夹）", 28, 276, 340, 20);
+    label(ss::T(L"U 盘内位置（可填子文件夹）").c_str(), 28, 276, 340, 20);
     state->usb = edit(kIdUsb, DisplayPathForDialog(state->rule.usbPath, state->appDir), 28, 296,
                       320);
-    button(kIdBrowseUsb, L"浏览…", 356, 296, 84, false);
-    button(kIdDefaultUsb, L"默认位置", 448, 296, 108, false);
+    button(kIdBrowseUsb, ss::T(L"浏览…").c_str(), 356, 296, 84, false);
+    button(kIdDefaultUsb, ss::T(L"默认位置").c_str(), 448, 296, 108, false);
 
-    HWND hint = CreateWindowExW(
-        0, L"STATIC",
-        L"填相对路径会自动跟随 U 盘盘符，例如：我的项目\\资料。留空时放进 SyncStickData\\这台电脑\\规则名。",
-        WS_CHILD | WS_VISIBLE | SS_LEFT, X(28), Y(330), W(540), H(35), dialog, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+    std::wstring hintText = ss::T(
+        L"填相对路径会自动跟随 U 盘盘符，例如：我的项目\\资料。留空时放进 "
+        L"SyncStickData\\这台电脑\\规则名。");
+    HWND hint = CreateWindowExW(0, L"STATIC", hintText.c_str(),
+                                WS_CHILD | WS_VISIBLE | SS_LEFT, X(28), Y(330), W(540), H(35),
+                                dialog, nullptr, GetModuleHandleW(nullptr), nullptr);
     SetDialogControlFont(hint, state->fonts.tiny);
 
     state->enabled = CreateWindowExW(
-        0, L"BUTTON", L"启用这一项",
+        0, L"BUTTON", ss::T(L"启用这一项").c_str(),
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, X(28), Y(372), W(180), H(26),
         dialog, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdEnabled)),
         GetModuleHandleW(nullptr), nullptr);
@@ -448,14 +456,14 @@ void CreateRuleControls(RuleDialogState* state) {
     SendMessageW(state->enabled, BM_SETCHECK, state->rule.enabled ? BST_CHECKED : BST_UNCHECKED,
                  0);
 
-    button(IDCANCEL, L"取消", 344, 424, 90, false);
-    button(IDOK, L"保存", 444, 424, 120, true);
+    button(IDCANCEL, ss::T(L"取消").c_str(), 344, 424, 90, false);
+    button(IDOK, ss::T(L"保存").c_str(), 444, 424, 120, true);
 }
 
 void GenerateDefaultUsbPath(RuleDialogState* state) {
     std::wstring name = TrimText(GetWindowTextString(state->name));
     if (name.empty()) {
-        name = L"新同步项";
+        name = ss::T(L"新同步项");
     }
     int kindIndex = static_cast<int>(SendMessageW(state->kind, CB_GETCURSEL, 0, 0));
     std::wstring kind = kindIndex == 1 ? L"file" : L"folder";
@@ -469,15 +477,15 @@ bool SaveRuleFromDialog(RuleDialogState* state) {
     std::wstring name = TrimText(GetWindowTextString(state->name));
     std::wstring pcPath = TrimText(GetWindowTextString(state->pc));
     if (pcPath.empty()) {
-        MessageBoxW(state->window, L"请选择电脑上的文件或文件夹。", L"还差一步",
-                    MB_OK | MB_ICONINFORMATION);
+        ss::ShowMessageBox(state->window, ss::T(L"请选择电脑上的文件或文件夹。").c_str(),
+                    ss::T(L"还差一步").c_str(), MB_OK | MB_ICONINFORMATION);
         SetFocus(state->pc);
         return false;
     }
     pcPath = ss::NormalizePath(pcPath);
     if (!ss::PathExists(pcPath)) {
-        MessageBoxW(state->window, L"这个电脑路径不存在，请重新选择。", L"路径无效",
-                    MB_OK | MB_ICONWARNING);
+        ss::ShowMessageBox(state->window, ss::T(L"这个电脑路径不存在，请重新选择。").c_str(),
+                    ss::T(L"路径无效").c_str(), MB_OK | MB_ICONWARNING);
         SetFocus(state->pc);
         return false;
     }
@@ -485,19 +493,19 @@ bool SaveRuleFromDialog(RuleDialogState* state) {
     bool isFile = kindIndex == 1;
     bool isDir = ss::IsDirectory(pcPath);
     if (isFile && isDir) {
-        MessageBoxW(state->window, L"这是文件夹，请把类型改成“文件夹”。", L"类型不匹配",
-                    MB_OK | MB_ICONWARNING);
+        ss::ShowMessageBox(state->window, ss::T(L"这是文件夹，请把类型改成“文件夹”。").c_str(),
+                    ss::T(L"类型不匹配").c_str(), MB_OK | MB_ICONWARNING);
         return false;
     }
     if (!isFile && !isDir) {
-        MessageBoxW(state->window, L"这是文件，请把类型改成“单个文件”。", L"类型不匹配",
-                    MB_OK | MB_ICONWARNING);
+        ss::ShowMessageBox(state->window, ss::T(L"这是文件，请把类型改成“单个文件”。").c_str(),
+                    ss::T(L"类型不匹配").c_str(), MB_OK | MB_ICONWARNING);
         return false;
     }
     if (name.empty()) {
         name = ss::GetFileName(pcPath);
         if (name.empty()) {
-            name = L"同步项";
+            name = ss::DefaultRuleNameText();
         }
     }
 
@@ -513,25 +521,27 @@ bool SaveRuleFromDialog(RuleDialogState* state) {
         usbPath = ss::ResolvePortablePath(usbText, state->appDir);
     }
     if (usbPath.empty()) {
-        MessageBoxW(state->window, L"U 盘内位置不能为空。", L"还差一步",
-                    MB_OK | MB_ICONINFORMATION);
+        ss::ShowMessageBox(state->window, ss::T(L"U 盘内位置不能为空。").c_str(),
+                    ss::T(L"还差一步").c_str(), MB_OK | MB_ICONINFORMATION);
         SetFocus(state->usb);
         return false;
     }
     if (ss::IsSamePath(pcPath, usbPath)) {
-        MessageBoxW(state->window, L"电脑路径和 U 盘路径不能相同。", L"路径重复",
-                    MB_OK | MB_ICONWARNING);
+        ss::ShowMessageBox(state->window, ss::T(L"电脑路径和 U 盘路径不能相同。").c_str(),
+                    ss::T(L"路径重复").c_str(), MB_OK | MB_ICONWARNING);
         return false;
     }
     if (!isFile && (ss::IsSubPath(pcPath, usbPath) || ss::IsSubPath(usbPath, pcPath))) {
-        MessageBoxW(state->window, L"电脑文件夹和 U 盘文件夹不能互相包含。", L"路径重叠",
-                    MB_OK | MB_ICONWARNING);
+        ss::ShowMessageBox(state->window, ss::T(L"电脑文件夹和 U 盘文件夹不能互相包含。").c_str(),
+                    ss::T(L"路径重叠").c_str(), MB_OK | MB_ICONWARNING);
         return false;
     }
     if (isFile) {
         if (ss::PathExists(usbPath) && ss::IsDirectory(usbPath)) {
-            MessageBoxW(state->window, L"文件类型的 U 盘位置必须是一个文件路径，不是文件夹。",
-                        L"路径不匹配", MB_OK | MB_ICONWARNING);
+            ss::ShowMessageBox(
+                state->window,
+                ss::T(L"文件类型的 U 盘位置必须是一个文件路径，不是文件夹。").c_str(),
+                ss::T(L"路径不匹配").c_str(), MB_OK | MB_ICONWARNING);
             return false;
         }
     }
@@ -611,7 +621,7 @@ LRESULT CALLBACK RuleWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                     SendMessageW(state->kind, CB_SETCURSEL, 1, 0);
                 }
                 std::wstring name = TrimText(GetWindowTextString(state->name));
-                if (name.empty() || name == L"新同步项") {
+                if (name.empty() || name == ss::T(L"新同步项")) {
                     std::wstring derived = ss::GetFileName(result);
                     if (!derived.empty()) {
                         SetWindowTextW(state->name, derived.c_str());
@@ -623,7 +633,8 @@ LRESULT CALLBACK RuleWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         }
         if (id == kIdBrowseUsb) {
             std::wstring absolute;
-            if (BrowseForPath(hwnd, true, absolute, L"选择 U 盘上的文件夹")) {
+            if (BrowseForPath(hwnd, true, absolute,
+                              ss::T(L"选择 U 盘上的文件夹").c_str())) {
                 std::wstring portable = ss::MakePortablePath(absolute, state->appDir);
                 SetWindowTextW(state->usb,
                                DisplayPathForDialog(portable, state->appDir).c_str());
@@ -677,7 +688,7 @@ bool ShowRuleDialog(HWND parent, ss::Rule& rule, bool isNew, const std::wstring&
     state.appDir = appDir;
     state.deviceName = deviceName;
     state.rule = rule;
-    state.title = isNew ? L"添加同步项" : L"编辑同步项";
+    state.title = isNew ? ss::T(L"添加同步项") : ss::T(L"编辑同步项");
 
     RECT parentRect{};
     GetWindowRect(parent, &parentRect);
@@ -732,13 +743,41 @@ bool RegisterRuleWindowClass(HINSTANCE instance) {
 
 constexpr UINT kMsgSyncFinished = WM_APP + 1;
 
-std::wstring CountText(int count, const wchar_t* suffix = L"个") {
-    return std::to_wstring(count) + suffix;
+std::wstring ParseLanguageOverride(PWSTR commandLine) {
+    std::wstring tag;
+    if (commandLine == nullptr) {
+        return tag;
+    }
+    std::wstring text = commandLine;
+    size_t pos = 0;
+    while ((pos = text.find(L"--lang", pos)) != std::wstring::npos) {
+        size_t valueStart = pos + 6;
+        if (valueStart < text.size() && text[valueStart] == L'=') {
+            ++valueStart;
+        } else {
+            while (valueStart < text.size() &&
+                   (text[valueStart] == L' ' || text[valueStart] == L'\t')) {
+                ++valueStart;
+            }
+        }
+        size_t valueEnd = valueStart;
+        while (valueEnd < text.size() && !std::iswspace(text[valueEnd]) &&
+               text[valueEnd] != L'"') {
+            ++valueEnd;
+        }
+        std::wstring value = text.substr(valueStart, valueEnd - valueStart);
+        if (!value.empty() && ss::ParseLanguageTag(value, tag)) {
+            return tag;
+        }
+        pos = valueStart;
+    }
+    return {};
 }
 
 class MainWindow {
 public:
-    explicit MainWindow(HINSTANCE instance) : instance_(instance) {}
+    explicit MainWindow(HINSTANCE instance, std::wstring languageOverride)
+        : instance_(instance), languageOverride_(std::move(languageOverride)) {}
     ~MainWindow() {
         if (syncActive_.load()) {
             progress_.cancel.store(true);
@@ -784,8 +823,10 @@ private:
     void ShowDesktopConflictNotice();
     void OnSyncFinished();
     void UpdateStatusTexts();
+    void ApplyLanguage(ss::Language language);
 
     void DrawHeader(HDC dc, int width, int contentX, int contentW);
+    void DrawLanguageToggle(HDC dc, const RECT& rect);
     void DrawToolbar(HDC dc, int width, int contentX, int contentW);
     void DrawStatus(HDC dc, int width, int contentX, int contentW);
     void DrawRules(HDC dc, int width, int contentX, int contentW, int sectionY, int rulesTop);
@@ -812,12 +853,14 @@ private:
     std::wstring lastSummary_;
     std::wstring phaseText_;
     std::wstring currentFileText_;
+    std::wstring languageOverride_;
     ss::AppConfig config_;
     ss::DeviceIdentity identity_;
     Fonts fonts_;
     HICON appIcon_ = nullptr;
     HBRUSH backgroundBrush_ = nullptr;
     std::vector<HitTarget> hits_;
+    RECT langToggleRect_{};
     int scroll_ = 0;
     int maxScroll_ = 0;
 
@@ -855,10 +898,20 @@ bool MainWindow::Create() {
     configPath_ = ss::GetConfigPath();
     logPath_ = ss::JoinPath(appDir_, L"SyncStickPortable.log");
 
+    std::wstring storedLanguage = ss::ReadStoredLanguage(configPath_);
+    const bool languageOverridden = !languageOverride_.empty();
+    if (languageOverridden) {
+        ss::SetLanguage(languageOverride_ == L"en" ? ss::Language::En : ss::Language::Zh);
+    } else if (!storedLanguage.empty()) {
+        ss::SetLanguage(storedLanguage == L"en" ? ss::Language::En : ss::Language::Zh);
+    } else {
+        ss::SetLanguage(ss::DetectSystemLanguage());
+    }
+
     std::wstring error;
     bool loaded = ss::LoadConfig(configPath_, config_, error);
     if (!loaded && ss::PathExists(configPath_)) {
-        configError_ = error.empty() ? L"配置文件读取失败" : error;
+        configError_ = error.empty() ? ss::T(L"配置文件读取失败") : error;
     }
 
     identity_ = ss::GetCurrentDevice();
@@ -874,6 +927,11 @@ bool MainWindow::Create() {
     } else if (newDevice) {
         std::wstring saveError;
         ss::SaveConfig(configPath_, config_, saveError);
+    }
+    if (!languageOverridden && config_.language != ss::LanguageTag()) {
+        config_.language = ss::LanguageTag();
+        std::wstring languageError;
+        ss::SaveConfig(configPath_, config_, languageError);
     }
 
     appIcon_ = LoadIconW(instance_, MAKEINTRESOURCEW(101));
@@ -904,7 +962,8 @@ bool MainWindow::Create() {
     int windowH = windowRect.bottom - windowRect.top;
     int x = workArea.left + ((workArea.right - workArea.left) - windowW) / 2;
     int y = workArea.top + ((workArea.bottom - workArea.top) - windowH) / 2;
-    hwnd_ = CreateWindowExW(0, kMainClass, L"SyncStick Portable · U 盘双向同步",
+    std::wstring windowTitle = ss::T(L"SyncStick Portable · U 盘双向同步");
+    hwnd_ = CreateWindowExW(0, kMainClass, windowTitle.c_str(),
                             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, x, y, windowW, windowH,
                             nullptr, nullptr, instance_, this);
     if (hwnd_ == nullptr) {
@@ -923,9 +982,10 @@ bool MainWindow::Create() {
     }
 
     if (!configError_.empty()) {
-        std::wstring message = L"无法读取 U 盘上的规则文件：\n" + configError_ +
-                               L"\n\n原文件不会被自动覆盖。";
-        MessageBoxW(hwnd_, message.c_str(), L"规则文件有问题", MB_OK | MB_ICONWARNING);
+        std::wstring message =
+            ss::TF(L"无法读取 U 盘上的规则文件：\n%s\n\n原文件不会被自动覆盖。", configError_);
+        std::wstring title = ss::T(L"规则文件有问题");
+        ss::ShowMessageBox(hwnd_, message.c_str(), title.c_str(), MB_OK | MB_ICONWARNING);
     }
     return true;
 }
@@ -1024,6 +1084,9 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case HitLog:
             OpenLog();
             break;
+        case HitLanguage:
+            ApplyLanguage(hit->index == 0 ? ss::Language::Zh : ss::Language::En);
+            break;
         case HitRuleOpen:
             OpenRulePath(hit->index);
             break;
@@ -1076,8 +1139,9 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT message, WPARAM wParam, LPARAM
         return 0;
     case WM_CLOSE:
         if (syncActive_.load()) {
-            int answer = MessageBoxW(hwnd_, L"正在同步，要停止并退出吗？",
-                                     L"SyncStick Portable", MB_YESNO | MB_ICONQUESTION);
+            std::wstring body = ss::T(L"正在同步，要停止并退出吗？");
+            int answer = ss::ShowMessageBox(hwnd_, body.c_str(), L"SyncStick Portable",
+                                     MB_YESNO | MB_ICONQUESTION);
             if (answer != IDYES) {
                 return 0;
             }
@@ -1198,6 +1262,13 @@ void MainWindow::RebuildHits(int width, int height) {
     add(contentX, toolbarY, contentX + S(150), toolbarY + S(44), HitSync);
     add(contentX + S(162), toolbarY, contentX + S(304), toolbarY + S(44), HitAdd);
     add(contentX + S(316), toolbarY, contentX + S(438), toolbarY + S(44), HitLog);
+    if (langToggleRect_.right > langToggleRect_.left) {
+        int middle = (langToggleRect_.left + langToggleRect_.right) / 2;
+        add(langToggleRect_.left, langToggleRect_.top, middle, langToggleRect_.bottom,
+            HitLanguage, 0);
+        add(middle, langToggleRect_.top, langToggleRect_.right, langToggleRect_.bottom,
+            HitLanguage, 1);
+    }
 
     const int cardHeight = S(98);
     const int cardGap = S(10);
@@ -1284,8 +1355,9 @@ bool MainWindow::SaveConfiguration(bool showError) {
         return true;
     }
     if (showError) {
-        std::wstring message = L"规则没能写入 U 盘：\n" + error;
-        MessageBoxW(hwnd_, message.c_str(), L"保存失败", MB_OK | MB_ICONWARNING);
+        std::wstring message = ss::TF(L"规则没能写入 U 盘：\n%s", error);
+        std::wstring title = ss::T(L"保存失败");
+        ss::ShowMessageBox(hwnd_, message.c_str(), title.c_str(), MB_OK | MB_ICONWARNING);
     }
     return false;
 }
@@ -1305,8 +1377,9 @@ void MainWindow::AddRule() {
     for (const auto& existing : device->rules) {
         if (ss::IsSamePath(existing.pcPath, rule.pcPath) &&
             ss::IsSamePath(existing.usbPath, rule.usbPath)) {
-            MessageBoxW(hwnd_, L"这个电脑路径已经有一条相同的同步项了。", L"重复的同步项",
-                        MB_OK | MB_ICONINFORMATION);
+            std::wstring body = ss::T(L"这个电脑路径已经有一条相同的同步项了。");
+            std::wstring title = ss::T(L"重复的同步项");
+            ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
             return;
         }
     }
@@ -1335,8 +1408,10 @@ void MainWindow::DeleteRule(int index) {
         return;
     }
     const ss::Rule& rule = device->rules[static_cast<size_t>(index)];
-    std::wstring message = L"删除“" + rule.name + L"”这条规则吗？\nU 盘里的文件不会被删除。";
-    if (MessageBoxW(hwnd_, message.c_str(), L"删除同步项",
+    std::wstring message =
+        ss::TF(L"删除“%s”这条规则吗？\nU 盘里的文件不会被删除。", rule.name);
+    std::wstring title = ss::T(L"删除同步项");
+    if (ss::ShowMessageBox(hwnd_, message.c_str(), title.c_str(),
                     MB_YESNO | MB_ICONQUESTION) != IDYES) {
         return;
     }
@@ -1363,8 +1438,9 @@ void MainWindow::OpenRulePath(int index) {
     }
     const ss::Rule& rule = device->rules[static_cast<size_t>(index)];
     if (!ss::PathExists(rule.pcPath)) {
-        MessageBoxW(hwnd_, L"这个电脑路径已经不存在了，可以编辑或删除这条规则。", L"路径不存在",
-                    MB_OK | MB_ICONINFORMATION);
+        std::wstring body = ss::T(L"这个电脑路径已经不存在了，可以编辑或删除这条规则。");
+        std::wstring title = ss::T(L"路径不存在");
+        ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
         return;
     }
     if (rule.kind == L"file") {
@@ -1377,8 +1453,9 @@ void MainWindow::OpenRulePath(int index) {
 
 void MainWindow::OpenLog() {
     if (!ss::PathExists(logPath_)) {
-        MessageBoxW(hwnd_, L"还没有生成日志文件。先同步一次吧。", L"暂无日志",
-                    MB_OK | MB_ICONINFORMATION);
+        std::wstring body = ss::T(L"还没有生成日志文件。先同步一次吧。");
+        std::wstring title = ss::T(L"暂无日志");
+        ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
         return;
     }
     ShellExecuteW(hwnd_, L"open", logPath_.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -1386,12 +1463,12 @@ void MainWindow::OpenLog() {
 
 void MainWindow::ShowDesktopConflictNotice() {
     desktopWarningShown_ = true;
-    MessageBoxW(
-        hwnd_,
+    std::wstring message = ss::T(
         L"检测到桌面版 SyncStick 正在运行。\n\n"
         L"两个程序同时写同一支 U 盘可能互相覆盖。便携版这次不会自动同步；"
-        L"请先退出桌面版，再回到这里点“立即同步”。",
-        L"检测到桌面版 SyncStick", MB_OK | MB_ICONINFORMATION);
+        L"请先退出桌面版，再回到这里点“立即同步”。");
+    std::wstring title = ss::T(L"检测到桌面版 SyncStick");
+    ss::ShowMessageBox(hwnd_, message.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::StartSync(bool interactive) {
@@ -1411,8 +1488,10 @@ void MainWindow::StartSync(bool interactive) {
     ss::DeviceRules* device = CurrentDevice();
     if (device == nullptr || device->rules.empty()) {
         if (interactive) {
-            int answer = MessageBoxW(hwnd_, L"还没有同步项，先添加一个文件夹或文件吧。",
-                                     L"还没有同步项", MB_YESNO | MB_ICONINFORMATION);
+            std::wstring body = ss::T(L"还没有同步项，先添加一个文件夹或文件吧。");
+            std::wstring title = ss::T(L"还没有同步项");
+            int answer =
+                ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_YESNO | MB_ICONINFORMATION);
             if (answer == IDYES) {
                 AddRule();
             }
@@ -1428,8 +1507,9 @@ void MainWindow::StartSync(bool interactive) {
     }
     if (!anyEnabled) {
         if (interactive) {
-            MessageBoxW(hwnd_, L"所有同步项都暂停了。先打开其中一项再同步。", L"没有启用的同步项",
-                        MB_OK | MB_ICONINFORMATION);
+            std::wstring body = ss::T(L"所有同步项都暂停了。先打开其中一项再同步。");
+            std::wstring title = ss::T(L"没有启用的同步项");
+            ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_OK | MB_ICONINFORMATION);
         }
         return;
     }
@@ -1438,7 +1518,7 @@ void MainWindow::StartSync(bool interactive) {
     ss::DeviceRules snapshot = *device;
     {
         std::lock_guard<std::mutex> lock(progress_.mutex);
-        progress_.phase = L"正在准备";
+        progress_.phase = ss::T(L"正在准备");
         progress_.currentFile.clear();
         progress_.lastMessage.clear();
     }
@@ -1490,7 +1570,8 @@ void MainWindow::OnSyncFinished() {
         lastSummary_ = stats->summary;
         lastRun_ = ss::NowStamp();
         if (lastSummary_.empty()) {
-            lastSummary_ = lastSyncOk_ ? L"已按规则完成一次同步" : L"同步没有完成";
+            lastSummary_ = lastSyncOk_ ? ss::T(L"已按规则完成一次同步")
+                                      : ss::T(L"同步没有完成");
         }
     }
 
@@ -1517,7 +1598,8 @@ void MainWindow::OnSyncFinished() {
                 ++shown;
             }
         }
-        MessageBoxW(hwnd_, body.c_str(), L"同步遇到问题", MB_OK | MB_ICONWARNING);
+        std::wstring title = ss::T(L"同步遇到问题");
+        ss::ShowMessageBox(hwnd_, body.c_str(), title.c_str(), MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -1525,6 +1607,21 @@ void MainWindow::UpdateStatusTexts() {
     std::lock_guard<std::mutex> lock(progress_.mutex);
     phaseText_ = progress_.phase;
     currentFileText_ = progress_.currentFile;
+}
+
+void MainWindow::ApplyLanguage(ss::Language language) {
+    if (ss::GetLanguage() == language) {
+        return;
+    }
+    ss::SetLanguage(language);
+    config_.language = ss::LanguageTag();
+    SaveConfiguration(false);
+    std::wstring title = ss::T(L"SyncStick Portable · U 盘双向同步");
+    SetWindowTextW(hwnd_, title.c_str());
+    if (hasLastSync_) {
+        lastSummary_ = ss::BuildSummary(lastStats_);
+    }
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::DrawHeader(HDC dc, int width, int contentX, int contentW) {
@@ -1549,13 +1646,18 @@ void MainWindow::DrawHeader(HDC dc, int width, int contentX, int contentW) {
     int pillX = brandX + brandWidth + S(16);
     DrawPill(dc, RECT{pillX, S(36), pillX + S(88), S(58)}, L"PORTABLE",
              fonts_.tiny, kAccent, kOnDark);
-    DrawTextLine(dc, L"U 盘随身同步", RECT{brandX, S(62), brandX + S(220), S(82)},
+    int languageX = pillX + S(88) + S(14);
+    RECT languageRect{languageX, S(34), languageX + S(88), S(60)};
+    langToggleRect_ = languageRect;
+    DrawLanguageToggle(dc, languageRect);
+    DrawTextLine(dc, ss::T(L"U 盘随身同步"), RECT{brandX, S(62), brandX + S(220), S(82)},
                  fonts_.small, kOnDarkFaint);
-    std::wstring machine = L"这台电脑 · " + identity_.name;
+    std::wstring machine = ss::TF(L"这台电脑 · %s", identity_.name);
     DrawTextLine(dc, machine, RECT{brandX, S(92), brandX + S(360), S(112)}, fonts_.tiny,
                  kOnDarkFaint);
-    DrawTextLine(dc, L"规则保存在这支 U 盘里", RECT{brandX, S(110), brandX + S(420), S(128)},
-                 fonts_.tiny, RGB(130, 145, 130));
+    DrawTextLine(dc, ss::T(L"规则保存在这支 U 盘里"),
+                 RECT{brandX, S(110), brandX + S(420), S(128)}, fonts_.tiny,
+                 RGB(130, 145, 130));
 
     int ringCenterX = contentX + contentW - S(96);
     int ringCenterY = S(61);
@@ -1572,29 +1674,47 @@ void MainWindow::DrawHeader(HDC dc, int width, int contentX, int contentW) {
     DrawTextLine(dc, L"USB", RECT{ringCenterX - S(38), ringCenterY - S(26),
                                   ringCenterX + S(38), ringCenterY + S(6)},
                  fonts_.h2, kOnDark, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DrawTextLine(dc, syncActive_.load() ? L"同步中" : L"已插入",
+    DrawTextLine(dc, syncActive_.load() ? ss::T(L"同步中") : ss::T(L"已插入"),
                  RECT{ringCenterX - S(38), ringCenterY + S(4), ringCenterX + S(38),
                       ringCenterY + S(26)},
                  fonts_.tiny, kOnDarkFaint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DrawTextLine(dc, L"U 盘已就绪", RECT{ringCenterX - S(70), S(110), ringCenterX + S(70),
+    DrawTextLine(dc, ss::T(L"U 盘已就绪"), RECT{ringCenterX - S(70), S(110),
+                                                 ringCenterX + S(70),
                                           S(128)},
                  fonts_.tiny, kOnDarkFaint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+}
+
+void MainWindow::DrawLanguageToggle(HDC dc, const RECT& rect) {
+    RoundCard(dc, rect, S(13), kDarkRaised, RGB(70, 82, 72));
+    int middle = (rect.left + rect.right) / 2;
+    RECT zhRect{rect.left + S(2), rect.top + S(2), middle, rect.bottom - S(2)};
+    RECT enRect{middle, rect.top + S(2), rect.right - S(2), rect.bottom - S(2)};
+    const bool chinese = ss::GetLanguage() == ss::Language::Zh;
+    RoundFill(dc, chinese ? zhRect : enRect, S(11), kAccent);
+    DrawTextLine(dc, ss::T(L"中文"), zhRect, fonts_.tiny,
+                 chinese ? kOnDark : kOnDarkFaint,
+                 DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    DrawTextLine(dc, L"EN", enRect, fonts_.tiny, chinese ? kOnDarkFaint : kOnDark,
+                 DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 }
 
 void MainWindow::DrawToolbar(HDC dc, int width, int contentX, int contentW) {
     int y = S(138) + S(18);
     int height = S(44);
     RECT syncRect{contentX, y, contentX + S(150), y + height};
-    DrawButton(dc, syncRect, syncActive_.load() ? L"停止同步" : L"立即同步", true, false,
+    DrawButton(dc, syncRect,
+               syncActive_.load() ? ss::T(L"停止同步") : ss::T(L"立即同步"), true, false,
                syncActive_.load() || RuleCount() > 0);
     RECT addRect{contentX + S(162), y, contentX + S(304), y + height};
-    DrawButton(dc, addRect, L"添加同步项", false, false);
+    DrawButton(dc, addRect, ss::T(L"添加同步项"), false, false);
     RECT logRect{contentX + S(316), y, contentX + S(438), y + height};
-    DrawButton(dc, logRect, L"打开日志", false, true);
+    DrawButton(dc, logRect, ss::T(L"打开日志"), false, true);
 
-    std::wstring countText = CountText(RuleCount()) + L" 个同步项";
+    std::wstring countText =
+        ss::CountText(RuleCount(), L"%s 个同步项", L"sync item", L"sync items");
     if (EnabledRuleCount() != RuleCount()) {
-        countText += L" · " + CountText(EnabledRuleCount()) + L" 个启用";
+        countText += L" · " +
+                     ss::CountText(EnabledRuleCount(), L"%s 个启用", L"enabled", L"enabled");
     }
     DrawTextLine(dc, countText,
                  RECT{contentX + contentW - S(360), y, contentX + contentW, y + height},
@@ -1616,26 +1736,26 @@ void MainWindow::DrawStatus(HDC dc, int width, int contentX, int contentW) {
     std::wstring subtitle;
     if (active) {
         UpdateStatusTexts();
-        title = L"正在同步";
-        subtitle = phaseText_.empty() ? L"正在比较两边的文件" : phaseText_;
+        title = ss::T(L"正在同步");
+        subtitle = phaseText_.empty() ? ss::T(L"正在比较两边的文件") : phaseText_;
         if (!currentFileText_.empty()) {
             subtitle = currentFileText_;
         }
     } else if (hasLastSync_) {
         if (lastStats_.cancelled) {
-            title = L"已停止";
+            title = ss::T(L"已停止");
         } else if (!lastSyncOk_ || lastStats_.errors > 0) {
-            title = L"同步遇到问题";
+            title = ss::T(L"同步遇到问题");
         } else {
-            title = L"同步完成";
+            title = ss::T(L"同步完成");
         }
         subtitle = lastSummary_;
     } else if (RuleCount() == 0) {
-        title = L"还没有同步项";
-        subtitle = L"先添加这台电脑上需要随身带走的文件夹或文件";
+        title = ss::T(L"还没有同步项");
+        subtitle = ss::T(L"先添加这台电脑上需要随身带走的文件夹或文件");
     } else {
-        title = L"准备好了";
-        subtitle = L"启动时会自动比较一次两边的内容";
+        title = ss::T(L"准备好了");
+        subtitle = ss::T(L"启动时会自动比较一次两边的内容");
     }
     DrawTextLine(dc, title, RECT{contentX + S(38), y + S(10), contentX + contentW - S(180),
                                  y + S(32)},
@@ -1669,7 +1789,8 @@ void MainWindow::DrawStatus(HDC dc, int width, int contentX, int contentW) {
                                            contentX + contentW - S(18), y + S(66)},
                      fonts_.mono, kInk, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
     } else {
-        std::wstring rightText = lastRun_.empty() ? L"" : L"上次同步 " + lastRun_;
+        std::wstring rightText =
+            lastRun_.empty() ? std::wstring() : ss::TF(L"上次同步 %s", lastRun_);
         DrawTextLine(dc, rightText,
                      RECT{contentX + contentW - S(260), y + S(14), contentX + contentW - S(18),
                           y + S(34)},
@@ -1679,11 +1800,12 @@ void MainWindow::DrawStatus(HDC dc, int width, int contentX, int contentW) {
 
 void MainWindow::DrawRules(HDC dc, int width, int contentX, int contentW, int sectionY,
                            int rulesTop) {
-    DrawTextLine(dc, L"同步项", RECT{contentX, sectionY, contentX + S(120), sectionY + S(24)},
+    DrawTextLine(dc, ss::T(L"同步项"),
+                 RECT{contentX, sectionY, contentX + S(180), sectionY + S(24)},
                  fonts_.bodyBold, kInk);
-    RECT badge{contentX + S(64), sectionY + S(2), contentX + S(92), sectionY + S(22)};
+    RECT badge{contentX + S(80), sectionY + S(2), contentX + S(110), sectionY + S(22)};
     DrawPill(dc, badge, std::to_wstring(RuleCount()), fonts_.tiny, kInkSoft, kCard);
-    DrawTextLine(dc, L"这台电脑的规则 · 双击一次启动",
+    DrawTextLine(dc, ss::T(L"这台电脑的规则 · 双击一次启动"),
                  RECT{contentX + contentW - S(360), sectionY, contentX + contentW,
                       sectionY + S(24)},
                  fonts_.tiny, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
@@ -1693,7 +1815,7 @@ void MainWindow::DrawRules(HDC dc, int width, int contentX, int contentW, int se
     if (count == 0) {
         DrawEmptyState(dc, contentX, rulesTop - scroll_, contentW);
         DrawTextLine(dc,
-                     L"提示：插上 U 盘后双击一次，程序会自动识别这台电脑并同步这里的规则。",
+                     ss::T(L"提示：插上 U 盘后双击一次，程序会自动识别这台电脑并同步这里的规则。"),
                      RECT{contentX, rulesTop + S(184), contentX + contentW,
                           rulesTop + S(208)},
                      fonts_.small, kInkFaint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
@@ -1748,7 +1870,8 @@ void MainWindow::DrawRuleCard(HDC dc, const ss::Rule& rule, int index, int x, in
     DrawTextLine(dc, Ellipsize(dc, rule.pcPath, textRight - textLeft),
                  RECT{textLeft, y + S(31), textRight, y + S(47)}, fonts_.small,
                  enabled ? kInkSoft : kInkFaint);
-    std::wstring usbText = L"U 盘 · " + ss::MakePortablePath(rule.usbPath, appDir_);
+    std::wstring usbText =
+        ss::TF(L"U 盘 · %s", ss::MakePortablePath(rule.usbPath, appDir_));
     DrawTextLine(dc, Ellipsize(dc, usbText, textRight - textLeft),
                  RECT{textLeft, y + S(49), textRight, y + S(65)}, fonts_.tiny,
                  enabled ? kInkFaint : RGB(151, 151, 141));
@@ -1756,17 +1879,18 @@ void MainWindow::DrawRuleCard(HDC dc, const ss::Rule& rule, int index, int x, in
     RECT modePill{x + width - S(168), y + S(68), x + width - S(74), y + S(90)};
     DrawPill(dc, modePill, ss::DirectionLabel(rule.mode), fonts_.tiny, kCard, kInkSoft);
 
-    DrawTextLine(dc, L"改", RECT{x + width - S(156), y + S(13), x + width - S(124),
+    DrawTextLine(dc, ss::T(L"改"), RECT{x + width - S(156), y + S(13), x + width - S(124),
                                  y + S(41)},
                  fonts_.small, kInkFaint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DrawTextLine(dc, L"删", RECT{x + width - S(118), y + S(13), x + width - S(86), y + S(41)},
+    DrawTextLine(dc, ss::T(L"删"), RECT{x + width - S(118), y + S(13), x + width - S(86),
+                                        y + S(41)},
                  fonts_.small, kInkFaint, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
     RECT toggle{x + width - S(74), y + S(16), x + width - S(32), y + S(38)};
     DrawSwitch(dc, toggle, enabled, true);
 
     if (!enabled) {
-        DrawTextLine(dc, L"已暂停", RECT{x + width - S(168), y + S(42), x + width - S(76),
+        DrawTextLine(dc, ss::T(L"已暂停"), RECT{x + width - S(168), y + S(42), x + width - S(76),
                                          y + S(62)},
                      fonts_.tiny, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
     }
@@ -1780,14 +1904,14 @@ void MainWindow::DrawEmptyState(HDC dc, int x, int y, int width) {
     RECT iconTile{x + width / 2 - S(24), y + S(22), x + width / 2 + S(24), y + S(70)};
     RoundFill(dc, iconTile, S(12), kAccentSoft);
     DrawRuleGlyph(dc, iconTile, L"folder");
-    DrawTextLine(dc, L"还没有同步项",
+    DrawTextLine(dc, ss::T(L"还没有同步项"),
                  RECT{x, y + S(78), x + width, y + S(104)}, fonts_.h2, kInk,
                  DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-    DrawTextLine(dc, L"选一个文件夹或文件，规则会按这台电脑记住",
+    DrawTextLine(dc, ss::T(L"选一个文件夹或文件，规则会按这台电脑记住"),
                  RECT{x + S(40), y + S(108), x + width - S(40), y + S(128)}, fonts_.small,
                  kInkSoft, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
     RECT button{x + width / 2 - S(80), y + S(134), x + width / 2 + S(80), y + S(166)};
-    DrawButton(dc, button, L"添加同步项", true, false);
+    DrawButton(dc, button, ss::T(L"添加同步项"), true, false);
 }
 
 void MainWindow::DrawFooter(HDC dc, int width, int contentX, int contentW) {
@@ -1796,13 +1920,13 @@ void MainWindow::DrawFooter(HDC dc, int width, int contentX, int contentW) {
     GetClientRect(hwnd_, &client);
     y = client.bottom - S(38);
     DrawLine(dc, contentX, y, contentX + contentW, y, kBorder);
-    const wchar_t* footer = desktopRunning_
-                                ? L"桌面版正在运行 · 便携版已暂停自动同步"
-                                : L"本机运行 · 规则保存在 U 盘 · 双击一次启动";
+    std::wstring footer = desktopRunning_
+                              ? ss::T(L"桌面版正在运行 · 便携版已暂停自动同步")
+                              : ss::T(L"本机运行 · 规则保存在 U 盘 · 双击一次启动");
     DrawTextLine(dc, footer,
                  RECT{contentX, y + S(8), contentX + contentW - S(180), y + S(30)},
                  fonts_.tiny, desktopRunning_ ? kAccent : kInkFaint);
-    DrawTextLine(dc, L"SyncStick Portable 1.0.1",
+    DrawTextLine(dc, L"SyncStick Portable 1.0.2",
                  RECT{contentX + contentW - S(200), y + S(8), contentX + contentW, y + S(30)},
                  fonts_.monoSmall, kInkFaint, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
 }
@@ -1881,7 +2005,7 @@ void MainWindow::DrawAppMark(HDC dc, int x, int y, int size) {
 
 } // namespace
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     SetProcessDPIAware();
     g_dpi = static_cast<int>(GetDpiForSystem());
 
@@ -1909,7 +2033,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return 0;
     }
 
-    MainWindow window(instance);
+    MainWindow window(instance, ParseLanguageOverride(commandLine));
     int result = 0;
     if (window.Create()) {
         result = window.Run();

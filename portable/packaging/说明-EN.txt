@@ -1,0 +1,52 @@
+SyncStick Portable 1.0.2
+========================
+
+Carry the files you need and keep working on another PC.
+
+How to use
+----------
+1. Put SyncStickPortable.exe (together with this help file and autorun.inf) in the USB root or any folder.
+2. Plug in the USB drive and double-click SyncStickPortable.exe once.
+3. Click "Add sync item", choose a folder or file on this PC. The USB destination can stay blank for the default, or use "Browse..." to pick a folder on the USB drive, or type a relative path.
+4. The app syncs once after the first item is added. On later inserts, double-click the app once; it identifies the current PC and syncs that PC's rules.
+5. You can also click "Sync now" or press F5 at any time.
+
+Where rules are stored
+----------------------
+All rules live in SyncStickPortable.ini next to SyncStickPortable.exe, so they travel with the USB drive.
+Each PC has its own rule set, identified automatically. Changing the USB port or drive letter does not lose the rules.
+The sync log is written to SyncStickPortable.log.
+
+How sync decisions are made
+---------------------------
+- Bidirectional sync: when both sides have the same file, the newer modification time overwrites the older one.
+- If the two timestamps differ by less than 3 seconds, the app skips the file and records a conflict instead of risking an overwrite.
+- No files are ever deleted; they are only copied or overwritten.
+- Folders and individual files are supported. You can also choose PC → USB only, or USB → PC only.
+- Files are written to a temporary file and then replaced, to avoid half-written files.
+
+Why it does not start automatically on insert
+---------------------------------------------
+Windows 10/11 blocks EXE files on removable drives from running silently. This is a system security restriction.
+autorun.inf can only provide the USB icon and label; it cannot bypass this. The portable edition therefore needs one double-click.
+If you need true "sync on insert", use the desktop edition installed on the PC.
+
+Running alongside the desktop edition
+-------------------------------------
+If the desktop SyncStick is running, the portable edition pauses automatic sync and shows a notice.
+Two programs writing the same USB drive can overwrite each other; exit the desktop edition from its tray icon, then click "Sync now" in the portable edition.
+The portable edition does not automatically replace whole rule sets based on which is newer, because the two rule sets may cover different scopes and a blind replacement could delete or overwrite the wrong files.
+
+Interface language
+------------------
+The app supports Simplified Chinese and English. Use the "中文 / EN" toggle
+in the top-right corner; the change applies immediately and is saved as
+language= in SyncStickPortable.ini. The first run follows the system language.
+You can also pass --lang zh or --lang en to override it for that run.
+
+Notes
+-----
+- The app does not use the network, upload files, or require administrator rights.
+- Keep SyncStickPortable.ini and the SyncStickData folder next to the exe.
+- If Windows warns about an unknown publisher, this is an unsigned self-built app; run it only on PCs you trust.
+- A destination path cannot equal or contain the source path; the app refuses to save such a rule.

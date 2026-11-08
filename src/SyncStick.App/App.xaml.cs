@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
+using SyncStick.App.Localization;
 using SyncStick.App.Services;
 using SyncStick.App.ViewModels;
 using SyncStick.Core.Services;
@@ -46,6 +47,9 @@ public partial class App : Application
         try
         {
             var settingsStore = new SettingsStore();
+            var bootstrapSettings = settingsStore.Load();
+            Loc.Initialize(ParseLanguageArgument(e.Args), bootstrapSettings.UiLanguage);
+
             var activityStore = new ActivityStore();
             _coordinator = new SyncCoordinator(settingsStore, activityStore, new WindowsDeviceService());
             _viewModel = new MainViewModel(_coordinator);
@@ -54,6 +58,7 @@ public partial class App : Application
                 DataContext = _viewModel
             };
             MainWindow = _mainWindow;
+            VisualLocalizer.Attach(_mainWindow);
 
             _coordinator.Notice += OnCoordinatorNotice;
             _coordinator.StateChanged += OnCoordinatorStateChanged;
@@ -91,7 +96,7 @@ public partial class App : Application
         {
             LogException(ex);
             MessageBox.Show(
-                "SyncStick 启动失败。\n\n" + ex.Message,
+                Loc.T("SyncStick 启动失败。") + "\n\n" + Loc.T(ex.Message),
                 "SyncStick",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -286,7 +291,7 @@ public partial class App : Application
         {
             tray = new WinForms.NotifyIcon
             {
-                Text = "SyncStick · U 盘自动同步"
+                Text = Loc.T("SyncStick · U 盘自动同步")
             };
 
             // The icon must be present before Visible is set: NotifyIcon adds
@@ -294,25 +299,26 @@ public partial class App : Application
             // a null icon can be dropped without an exception.
             tray.Icon = LoadTrayIcon();
 
+            var trayFont = new Drawing.Font(Loc.IsEnglish ? "Segoe UI" : "Microsoft YaHei UI", 9f);
             var menu = new WinForms.ContextMenuStrip
             {
                 ShowImageMargin = false,
                 ShowCheckMargin = true,
-                Font = new Drawing.Font("Microsoft YaHei UI", 9f),
+                Font = trayFont,
                 BackColor = Drawing.Color.FromArgb(252, 251, 246),
                 Renderer = new WinForms.ToolStripProfessionalRenderer(new TrayColorTable())
             };
 
-            var openItem = new WinForms.ToolStripMenuItem("打开 SyncStick") { Font = new Drawing.Font("Microsoft YaHei UI", 9f, Drawing.FontStyle.Bold) };
+            var openItem = new WinForms.ToolStripMenuItem(Loc.T("打开 SyncStick")) { Font = new Drawing.Font(trayFont, Drawing.FontStyle.Bold) };
             openItem.Click += (_, _) => ShowMainWindow();
 
-            _syncNowMenuItem = new WinForms.ToolStripMenuItem("立即同步");
+            _syncNowMenuItem = new WinForms.ToolStripMenuItem(Loc.T("立即同步"));
             _syncNowMenuItem.Click += OnTraySyncNow;
 
-            _autoSyncMenuItem = new WinForms.ToolStripMenuItem("插入 U 盘后自动同步");
+            _autoSyncMenuItem = new WinForms.ToolStripMenuItem(Loc.T("插入 U 盘后自动同步"));
             _autoSyncMenuItem.Click += (_, _) => _viewModel?.ToggleAutoSyncFromTray();
 
-            var exitItem = new WinForms.ToolStripMenuItem("退出");
+            var exitItem = new WinForms.ToolStripMenuItem(Loc.T("退出"));
             exitItem.Click += (_, _) => RequestExit();
 
             menu.Items.Add(openItem);
@@ -540,12 +546,12 @@ public partial class App : Application
         }
 
         var text = _coordinator.IsSyncing
-            ? "SyncStick · 正在同步"
+            ? Loc.T("SyncStick · 正在同步")
             : _coordinator.TargetMatch.Device is not null
-                ? $"SyncStick · {_coordinator.TargetMatch.Device.DriveLetter} 已连接"
+                ? Loc.T($"SyncStick · {_coordinator.TargetMatch.Device.DriveLetter} 已连接")
                 : _coordinator.Settings.TargetDevice is not null
-                    ? "SyncStick · 等待目标 U 盘"
-                    : "SyncStick · 尚未设置目标";
+                    ? Loc.T("SyncStick · 等待目标 U 盘")
+                    : Loc.T("SyncStick · 尚未设置目标");
         _trayIcon.Text = text.Length <= 63 ? text : text[..63];
     }
 
@@ -558,8 +564,8 @@ public partial class App : Application
 
         try
         {
-            _trayIcon.BalloonTipTitle = isError ? "SyncStick · 需要注意" : "SyncStick";
-            _trayIcon.BalloonTipText = message;
+            _trayIcon.BalloonTipTitle = isError ? Loc.T("SyncStick · 需要注意") : "SyncStick";
+            _trayIcon.BalloonTipText = Loc.T(message);
             _trayIcon.BalloonTipIcon = isError ? WinForms.ToolTipIcon.Warning : WinForms.ToolTipIcon.Info;
             _trayIcon.ShowBalloonTip(4200);
         }
@@ -583,7 +589,7 @@ public partial class App : Application
         try
         {
             MessageBox.Show(
-                "SyncStick 遇到一个未处理的界面错误，但会继续运行。\n\n" + e.Exception.Message,
+                Loc.T("SyncStick 遇到一个未处理的界面错误，但会继续运行。") + "\n\n" + Loc.T(e.Exception.Message),
                 "SyncStick",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -592,6 +598,27 @@ public partial class App : Application
         {
             _showingUiErrorDialog = false;
         }
+    }
+
+    /// <summary>Reads <c>--lang en</c> / <c>--lang=zh</c> from the command line.</summary>
+    private static string? ParseLanguageArgument(string[] arguments)
+    {
+        const string prefix = "--lang=";
+        for (var index = 0; index < arguments.Length; index++)
+        {
+            var argument = arguments[index];
+            if (argument.Equals("--lang", StringComparison.OrdinalIgnoreCase))
+            {
+                return index + 1 < arguments.Length ? arguments[index + 1] : null;
+            }
+
+            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return argument[prefix.Length..];
+            }
+        }
+
+        return null;
     }
 
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)

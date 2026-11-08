@@ -1,4 +1,4 @@
-SyncStick 1.0.3 · U 盘自动同步
+SyncStick 1.0.4 · U 盘自动同步
 ================================
 
 一、运行
@@ -50,7 +50,15 @@ Windows 11 可能会把新图标收进右下角的 ^ 里；点一下 ^ 就能看
 SyncStick.exe，再回到设置重试。由沙箱或受限权限启动的程序，
 Windows 会拒绝写入启动项。
 
-五、数据位置
+五、界面语言
+------------
+SyncStick 支持简体中文和 English。
+打开“设置”，在“界面语言 / LANGUAGE”中选择“跟随系统 / 中文 / English”，
+然后重启 SyncStick 生效。默认跟随系统；中文系统显示中文，其他系统显示 English。
+也可以在命令行用 --lang zh 或 --lang en 临时指定本次运行的语言。
+切换语言不会修改同步规则、路径或历史记录。
+
+六、数据位置
 ------------
 %APPDATA%\SyncStick\settings.json   配置
 %APPDATA%\SyncStick\activity.json   最近 60 次同步记录

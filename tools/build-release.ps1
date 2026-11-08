@@ -42,6 +42,7 @@ try {
         Copy-Item -Path (Join-Path $staging '*') -Destination $dist -Recurse -Force
         Get-ChildItem -Path $dist -Filter '*.pdb' | Remove-Item -Force
         Copy-Item -Path (Join-Path $root 'docs\运行说明.txt') -Destination $dist -Force
+        Copy-Item -Path (Join-Path $root 'docs\运行说明-EN.txt') -Destination $dist -Force
     }
     finally {
         if (Test-Path $staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue }

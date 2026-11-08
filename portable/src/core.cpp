@@ -1,5 +1,7 @@
 #include "core.h"
 
+#include "i18n.h"
+
 #include <algorithm>
 #include <cwctype>
 #include <filesystem>
@@ -92,12 +94,12 @@ bool ReadTextFileUtf8(const std::wstring& path, std::wstring& text, std::wstring
         if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) {
             return true;
         }
-        error = L"读取配置失败：" + FormatWin32Error(code);
+        error = TF(L"读取配置失败：%s", FormatWin32Error(code));
         return false;
     }
     LARGE_INTEGER size{};
     if (!GetFileSizeEx(file, &size)) {
-        error = L"读取配置失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"读取配置失败：%s", FormatWin32Error(GetLastError()));
         CloseHandle(file);
         return false;
     }
@@ -107,7 +109,7 @@ bool ReadTextFileUtf8(const std::wstring& path, std::wstring& text, std::wstring
     if (!bytes.empty()) {
         ok = ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr) != FALSE;
         if (!ok) {
-            error = L"读取配置失败：" + FormatWin32Error(GetLastError());
+            error = TF(L"读取配置失败：%s", FormatWin32Error(GetLastError()));
         }
     }
     CloseHandle(file);
@@ -132,7 +134,7 @@ bool WriteTextFileUtf8Atomic(const std::wstring& path, const std::wstring& text,
     if (fsPath.has_parent_path()) {
         std::filesystem::create_directories(fsPath.parent_path(), ec);
         if (ec) {
-            error = L"创建目录失败：" + WidenUtf8(ec.message());
+            error = TF(L"创建目录失败：%s", WidenUtf8(ec.message()));
             return false;
         }
     }
@@ -143,7 +145,7 @@ bool WriteTextFileUtf8Atomic(const std::wstring& path, const std::wstring& text,
     HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                               FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        error = L"写入配置失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"写入配置失败：%s", FormatWin32Error(GetLastError()));
         return false;
     }
     DWORD written = 0;
@@ -157,14 +159,14 @@ bool WriteTextFileUtf8Atomic(const std::wstring& path, const std::wstring& text,
     }
     CloseHandle(file);
     if (!ok) {
-        error = L"写入配置失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"写入配置失败：%s", FormatWin32Error(GetLastError()));
         DeleteFileW(temp.c_str());
         return false;
     }
 
     if (!MoveFileExW(temp.c_str(), normalized.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        error = L"替换配置失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"替换配置失败：%s", FormatWin32Error(GetLastError()));
         DeleteFileW(temp.c_str());
         return false;
     }
@@ -304,7 +306,7 @@ bool EnsureParentDirectory(const std::wstring& path, std::wstring& error) {
         return true;
     }
     if (!EnsureDirectory(parent)) {
-        error = L"无法创建目录：" + parent;
+        error = TF(L"无法创建目录：%s", parent);
         return false;
     }
     return true;
@@ -382,12 +384,12 @@ bool EnumerateFolder(const std::wstring& root, const std::wstring& appDir,
 
 std::wstring ModeText(const std::wstring& mode) {
     if (mode == L"pc2usb") {
-        return L"电脑 → U 盘";
+        return T(L"电脑 → U 盘");
     }
     if (mode == L"usb2pc") {
-        return L"U 盘 → 电脑";
+        return T(L"U 盘 → 电脑");
     }
-    return L"双向同步";
+    return T(L"双向同步");
 }
 
 } // namespace
@@ -406,9 +408,7 @@ std::wstring FormatWin32Error(DWORD error) {
             result.pop_back();
         }
     } else {
-        wchar_t number[32]{};
-        swprintf_s(number, L"错误 %lu", static_cast<unsigned long>(error));
-        result = number;
+        result = TF(L"错误 %s", static_cast<unsigned long>(error));
     }
     if (buffer != nullptr) {
         LocalFree(buffer);
@@ -661,7 +661,7 @@ std::wstring GetComputerNameText() {
     wchar_t buffer[MAX_COMPUTERNAME_LENGTH + 1]{};
     DWORD size = static_cast<DWORD>(std::size(buffer));
     if (!GetComputerNameW(buffer, &size)) {
-        return L"这台电脑";
+        return T(L"这台电脑");
     }
     return buffer;
 }
@@ -783,7 +783,7 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
         if (currentRule->name.empty()) {
             currentRule->name = GetFileName(currentRule->pcPath);
             if (currentRule->name.empty()) {
-                currentRule->name = L"同步项";
+                currentRule->name = DefaultRuleNameText();
             }
         }
         if (currentRule->kind.empty()) {
@@ -879,6 +879,11 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
             } else if (key == L"enabled") {
                 currentRule->enabled = !(value == L"0" || _wcsicmp(value.c_str(), L"false") == 0);
             }
+        } else if (currentDevice == nullptr && key == L"language") {
+            std::wstring tag;
+            if (ParseLanguageTag(value, tag)) {
+                config.language = tag;
+            }
         } else if (currentDevice != nullptr && key == L"name") {
             currentDevice->name = value;
         }
@@ -900,12 +905,23 @@ bool LoadConfig(const std::wstring& path, AppConfig& config, std::wstring& error
     return true;
 }
 
+std::wstring ReadStoredLanguage(const std::wstring& path) {
+    AppConfig config;
+    std::wstring error;
+    if (!LoadConfig(path, config, error)) {
+        return {};
+    }
+    return config.language;
+}
+
 bool SaveConfig(const std::wstring& path, const AppConfig& config, std::wstring& error) {
     error.clear();
     std::wstring appDir = GetAppDirectory();
     std::wstringstream out;
     out << L"# SyncStick Portable\r\n";
-    out << L"# 规则按电脑保存；U 盘路径相对当前程序目录时，换盘符也不会失效。\r\n\r\n";
+    out << L"# 规则按电脑保存；U 盘路径相对当前程序目录时，换盘符也不会失效。\r\n";
+    out << L"# Rules are stored per PC; USB paths stay relative to this folder when possible.\r\n";
+    out << L"language=" << config.language << L"\r\n\r\n";
     for (const auto& device : config.devices) {
         out << L"[device." << device.id << L"]\r\n";
         out << L"name=" << device.name << L"\r\n\r\n";
@@ -951,7 +967,7 @@ enum class PairDecision {
 
 std::wstring DisplayRelative(const std::wstring& relative) {
     if (relative.empty() || relative == L".") {
-        return L"（根目录）";
+        return T(L"（根目录）");
     }
     return relative;
 }
@@ -976,18 +992,18 @@ PairDecision DecidePair(const FileInfo& pc, const FileInfo& usb, std::wstring& r
     LONGLONG pcTicks = FileTimeTicks(pc.modified);
     LONGLONG usbTicks = FileTimeTicks(usb.modified);
     if (pc.size == usb.size && pcTicks == usbTicks) {
-        reason = L"两边大小相同但修改时间完全相同，内容可能不同";
+        reason = T(L"两边大小相同但修改时间完全相同，内容可能不同");
         return PairDecision::Conflict;
     }
     if (pcTicks > usbTicks + kFileTimeTolerance) {
-        reason = L"电脑上的版本更新";
+        reason = T(L"电脑上的版本更新");
         return PairDecision::PcToUsb;
     }
     if (usbTicks > pcTicks + kFileTimeTolerance) {
-        reason = L"U 盘上的版本更新";
+        reason = T(L"U 盘上的版本更新");
         return PairDecision::UsbToPc;
     }
-    reason = L"两边修改时间相差不到 3 秒，无法安全判断哪边更新";
+    reason = T(L"两边修改时间相差不到 3 秒，无法安全判断哪边更新");
     return PairDecision::Conflict;
 }
 
@@ -1005,8 +1021,8 @@ void AddOperation(PlanResult& plan, bool pcToUsb, const std::wstring& source,
 
 std::wstring ConflictText(const std::wstring& relative, const FileInfo& pc, const FileInfo& usb,
                           const std::wstring& reason) {
-    std::wstring text = L"冲突：" + DisplayRelative(relative) + L" — " + reason;
-    text += L"（电脑 " + FileTimeText(pc.modified) + L"，U 盘 " + FileTimeText(usb.modified) + L"）";
+    std::wstring text = TF(L"冲突：%s — %s", DisplayRelative(relative), reason);
+    text += TF(L"（电脑 %s，U 盘 %s）", FileTimeText(pc.modified), FileTimeText(usb.modified));
     return text;
 }
 
@@ -1023,15 +1039,15 @@ bool PlanFileRule(const Rule& rule, PlanResult& plan, std::wstring& error) {
     }
 
     if (!pcExists && !usbExists) {
-        error = L"两边的文件都不存在";
+        error = T(L"两边的文件都不存在");
         return false;
     }
     if (rule.mode == L"pc2usb" && !pcExists) {
-        error = L"电脑上的文件不存在";
+        error = T(L"电脑上的文件不存在");
         return false;
     }
     if (rule.mode == L"usb2pc" && !usbExists) {
-        error = L"U 盘上的文件不存在";
+        error = T(L"U 盘上的文件不存在");
         return false;
     }
 
@@ -1079,11 +1095,11 @@ bool PlanFolderRule(const Rule& rule, PlanResult& plan, std::wstring& error) {
     std::map<std::wstring, FileInfo, CaseInsensitiveLess> pcFiles;
     std::map<std::wstring, FileInfo, CaseInsensitiveLess> usbFiles;
     if (!EnumerateFolder(rule.pcPath, GetAppDirectory(), pcFiles)) {
-        error = L"无法读取电脑文件夹：" + FormatWin32Error(GetLastError());
+        error = TF(L"无法读取电脑文件夹：%s", FormatWin32Error(GetLastError()));
         return false;
     }
     if (!EnumerateFolder(rule.usbPath, GetAppDirectory(), usbFiles)) {
-        error = L"无法读取 U 盘文件夹：" + FormatWin32Error(GetLastError());
+        error = TF(L"无法读取 U 盘文件夹：%s", FormatWin32Error(GetLastError()));
         return false;
     }
 
@@ -1166,15 +1182,15 @@ bool ValidateRule(const Rule& rule, std::wstring& error) {
         return true;
     }
     if (rule.name.empty()) {
-        error = L"规则没有名称";
+        error = T(L"规则没有名称");
         return false;
     }
     if (rule.pcPath.empty() || rule.usbPath.empty()) {
-        error = L"电脑路径或 U 盘路径为空";
+        error = T(L"电脑路径或 U 盘路径为空");
         return false;
     }
     if (IsSamePath(rule.pcPath, rule.usbPath)) {
-        error = L"电脑路径和 U 盘路径相同";
+        error = T(L"电脑路径和 U 盘路径相同");
         return false;
     }
 
@@ -1184,36 +1200,36 @@ bool ValidateRule(const Rule& rule, std::wstring& error) {
     bool pcExists = GetFileInfo(rule.pcPath, pcInfo);
     bool usbExists = GetFileInfo(rule.usbPath, usbInfo);
     if (pcExists && (isFile ? pcInfo.isDirectory : !pcInfo.isDirectory)) {
-        error = isFile ? L"电脑路径不是文件" : L"电脑路径不是文件夹";
+        error = isFile ? T(L"电脑路径不是文件") : T(L"电脑路径不是文件夹");
         return false;
     }
     if (usbExists && (isFile ? usbInfo.isDirectory : !usbInfo.isDirectory)) {
-        error = isFile ? L"U 盘路径不是文件" : L"U 盘路径不是文件夹";
+        error = isFile ? T(L"U 盘路径不是文件") : T(L"U 盘路径不是文件夹");
         return false;
     }
     if (!isFile && pcExists && usbExists && (IsSubPath(rule.pcPath, rule.usbPath) ||
                                              IsSubPath(rule.usbPath, rule.pcPath))) {
-        error = L"电脑路径和 U 盘路径互相包含，无法安全同步";
+        error = T(L"电脑路径和 U 盘路径互相包含，无法安全同步");
         return false;
     }
 
     if (rule.mode == L"both") {
         if (!pcExists && !usbExists) {
-            error = L"两边的路径都不存在";
+            error = T(L"两边的路径都不存在");
             return false;
         }
     } else if (rule.mode == L"pc2usb") {
         if (!pcExists) {
-            error = L"电脑上的源文件或文件夹不存在";
+            error = T(L"电脑上的源文件或文件夹不存在");
             return false;
         }
     } else if (rule.mode == L"usb2pc") {
         if (!usbExists) {
-            error = L"U 盘上的源文件或文件夹不存在";
+            error = T(L"U 盘上的源文件或文件夹不存在");
             return false;
         }
     } else {
-        error = L"同步方向无效";
+        error = T(L"同步方向无效");
         return false;
     }
     return true;
@@ -1222,26 +1238,26 @@ bool ValidateRule(const Rule& rule, std::wstring& error) {
 bool CopyOneFile(const CopyOperation& operation, std::wstring& error) {
     error.clear();
     if (!PathExists(operation.source)) {
-        error = L"源文件已经不存在：" + operation.source;
+        error = TF(L"源文件已经不存在：%s", operation.source);
         return false;
     }
     FileInfo sourceInfo;
     if (!GetFileInfo(operation.source, sourceInfo) || sourceInfo.isDirectory) {
-        error = L"源文件无法读取：" + operation.source;
+        error = TF(L"源文件无法读取：%s", operation.source);
         return false;
     }
     if (operation.size > 0) {
         std::filesystem::path destinationPath(operation.destination);
         std::wstring volumeRoot = destinationPath.root_path().wstring();
         if (volumeRoot.empty()) {
-            error = L"无法判断目标磁盘：" + operation.destination;
+            error = TF(L"无法判断目标磁盘：%s", operation.destination);
             return false;
         }
         ULARGE_INTEGER freeBytes{};
         if (GetDiskFreeSpaceExW(volumeRoot.c_str(), nullptr, nullptr, &freeBytes)) {
             if (freeBytes.QuadPart < operation.size + kCopyHeadroom) {
-                error = L"目标磁盘剩余空间不足（需要 " + FormatBytes(operation.size) +
-                        L"，可用 " + FormatBytes(freeBytes.QuadPart) + L"）";
+                error = TF(L"目标磁盘剩余空间不足（需要 %s，可用 %s）",
+                           FormatBytes(operation.size), FormatBytes(freeBytes.QuadPart));
                 return false;
             }
         }
@@ -1256,7 +1272,7 @@ bool CopyOneFile(const CopyOperation& operation, std::wstring& error) {
     std::wstring temp = operation.destination + L".syncstick-tmp";
     DeleteFileW(LongPath(temp).c_str());
     if (!CopyFileW(LongPath(operation.source).c_str(), LongPath(temp).c_str(), FALSE)) {
-        error = L"复制失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"复制失败：%s", FormatWin32Error(GetLastError()));
         DeleteFileW(LongPath(temp).c_str());
         return false;
     }
@@ -1286,7 +1302,7 @@ bool CopyOneFile(const CopyOperation& operation, std::wstring& error) {
     }
     if (!MoveFileExW(LongPath(temp).c_str(), LongPath(operation.destination).c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        error = L"替换目标文件失败：" + FormatWin32Error(GetLastError());
+        error = TF(L"替换目标文件失败：%s", FormatWin32Error(GetLastError()));
         DeleteFileW(LongPath(temp).c_str());
         return false;
     }
@@ -1341,7 +1357,7 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
     if (!logPath.empty()) {
         log.Open(logPath);
     }
-    log.Line(L"开始同步设备：" + device.name + L"（" + device.id + L"）");
+    log.Line(TF(L"开始同步设备：%s（%s）", device.name, device.id));
 
     auto addMessage = [&](const std::wstring& message) {
         stats.messages.push_back(message);
@@ -1353,7 +1369,7 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
     };
 
     if (progress != nullptr) {
-        SetProgressPhase(progress, L"正在检查规则");
+        SetProgressPhase(progress, T(L"正在检查规则"));
     }
 
     struct RulePlan {
@@ -1367,32 +1383,32 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
         }
         std::wstring error;
         if (!ValidateRule(rule, error)) {
-            addError(L"规则「" + rule.name + L"」：" + error);
+            addError(TF(L"规则「%s」：%s", rule.name, error));
             continue;
         }
         PlanResult plan;
         if (rule.kind == L"file") {
             if (!PlanFileRule(rule, plan, error)) {
-                addError(L"规则「" + rule.name + L"」：" + error);
+                addError(TF(L"规则「%s」：%s", rule.name, error));
                 continue;
             }
         } else {
             if (!PlanFolderRule(rule, plan, error)) {
-                addError(L"规则「" + rule.name + L"」：" + error);
+                addError(TF(L"规则「%s」：%s", rule.name, error));
                 continue;
             }
         }
         stats.conflicts += plan.conflicts;
         stats.skipped += plan.unchanged + plan.unmatched;
         for (const auto& note : plan.notes) {
-            addMessage(L"规则「" + rule.name + L"」" + note);
+            addMessage(TF(L"规则「%s」%s", rule.name, note));
         }
         plans.push_back(RulePlan{&rule, std::move(plan)});
     }
 
     if (progress != nullptr && progress->cancel) {
         stats.cancelled = true;
-        stats.summary = L"同步已取消";
+        stats.summary = T(L"同步已取消");
         FinishProgress(progress, stats.summary);
         log.Line(stats.summary);
         return false;
@@ -1410,11 +1426,12 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
     if (progress != nullptr) {
         progress->totalFiles = totalOperations;
         progress->totalBytes = totalBytes;
-        SetProgressPhase(progress, totalOperations == 0 ? L"正在检查文件" : L"准备写入");
+        SetProgressPhase(progress,
+                         totalOperations == 0 ? T(L"正在检查文件") : T(L"准备写入"));
     }
 
     if (totalOperations == 0) {
-        stats.summary = L"检查完成，没有需要同步的文件";
+        stats.summary = T(L"检查完成，没有需要同步的文件");
         FinishProgress(progress, stats.summary);
         log.Line(stats.summary);
         return stats.errors == 0;
@@ -1428,12 +1445,12 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
                 break;
             }
             if (progress != nullptr) {
-                SetProgressPhase(progress,
-                                 operation.pcToUsb ? L"正在写入 U 盘" : L"正在写回电脑");
+                SetProgressPhase(progress, operation.pcToUsb ? T(L"正在写入 U 盘")
+                                                              : T(L"正在写回电脑"));
                 SetProgressFile(progress, operation.relative);
             }
-            log.Line((operation.pcToUsb ? L"复制到 U 盘：" : L"复制到电脑：") +
-                     operation.relative);
+            log.Line(operation.pcToUsb ? TF(L"复制到 U 盘：%s", operation.relative)
+                                       : TF(L"复制到电脑：%s", operation.relative));
             std::wstring error;
             if (CopyOneFile(operation, error)) {
                 ++stats.copied;
@@ -1442,7 +1459,7 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
                     progress->bytesDone = stats.bytesCopied;
                 }
             } else {
-                addError(L"复制失败：" + DisplayRelative(operation.relative) + L" — " + error);
+                addError(TF(L"复制失败：%s — %s", DisplayRelative(operation.relative), error));
             }
             ++filesDone;
             if (progress != nullptr) {
@@ -1454,25 +1471,32 @@ bool SyncDevice(const DeviceRules& device, const std::wstring& appDir,
         }
     }
 
-    if (stats.cancelled) {
-        stats.summary = L"同步已取消，已写入 " + std::to_wstring(stats.copied) + L" 个文件";
-    } else if (stats.errors > 0) {
-        stats.summary = L"同步结束，写入 " + std::to_wstring(stats.copied) + L" 个文件，" +
-                        std::to_wstring(stats.errors) + L" 个错误";
-    } else if (stats.copied == 0) {
-        stats.summary = L"检查完成，没有需要同步的文件";
-    } else {
-        stats.summary = L"同步完成，写入 " + std::to_wstring(stats.copied) + L" 个文件";
-        if (stats.skipped > 0) {
-            stats.summary += L"，跳过 " + std::to_wstring(stats.skipped) + L" 个未变化文件";
-        }
-    }
-    if (stats.conflicts > 0) {
-        stats.summary += L"，保留 " + std::to_wstring(stats.conflicts) + L" 处冲突";
-    }
+    stats.summary = BuildSummary(stats);
     FinishProgress(progress, stats.summary);
     log.Line(stats.summary);
     return !stats.cancelled && stats.errors == 0;
+}
+
+std::wstring BuildSummary(const SyncStats& stats) {
+    if (stats.cancelled) {
+        return TF(L"同步已取消，已写入 %s 个文件", stats.copied);
+    }
+    if (stats.errors > 0) {
+        return TF(L"同步结束，写入 %s 个文件，%s 个错误", stats.copied, stats.errors);
+    }
+    std::wstring summary;
+    if (stats.copied == 0) {
+        summary = T(L"检查完成，没有需要同步的文件");
+    } else {
+        summary = TF(L"同步完成，写入 %s 个文件", stats.copied);
+        if (stats.skipped > 0) {
+            summary += TF(L"，跳过 %s 个未变化文件", stats.skipped);
+        }
+    }
+    if (stats.conflicts > 0) {
+        summary += TF(L"，保留 %s 处冲突", stats.conflicts);
+    }
+    return summary;
 }
 
 } // namespace ss

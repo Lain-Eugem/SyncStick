@@ -20,12 +20,19 @@ public sealed class AppSettings
 
     public SyncSettings Sync { get; set; } = new();
 
+    /// <summary>
+    /// Preferred UI language: "system" (follow Windows), "zh" or "en".
+    /// Stored as plain text so older builds simply ignore it.
+    /// </summary>
+    public string UiLanguage { get; set; } = "system";
+
     public AppSettings Normalize()
     {
         Sources = (Sources ?? new List<SourceItem>())
             .Where(source => source is not null)
             .ToList();
         Sync ??= new SyncSettings();
+        UiLanguage = NormalizeLanguage(UiLanguage);
 
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in Sources)
@@ -43,5 +50,16 @@ public sealed class AppSettings
         }
 
         return this;
+    }
+
+    private static string NormalizeLanguage(string? value)
+    {
+        var language = value?.Trim().ToLowerInvariant();
+        return language switch
+        {
+            "zh" or "zh-cn" or "zh-hans" => "zh",
+            "en" or "en-us" or "en-gb" => "en",
+            _ => "system"
+        };
     }
 }
