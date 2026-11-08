@@ -1,0 +1,32 @@
+#include <windows.h>
+
+101 ICON "assets/syncstick.ico"
+
+1 VERSIONINFO
+FILEVERSION 1,0,1,0
+PRODUCTVERSION 1,0,1,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "SyncStick"
+            VALUE "FileDescription", "SyncStick Portable - U 盘双向同步"
+            VALUE "FileVersion", "1.0.1"
+            VALUE "InternalName", "SyncStickPortable"
+            VALUE "LegalCopyright", "SyncStick"
+            VALUE "OriginalFilename", "SyncStickPortable.exe"
+            VALUE "ProductName", "SyncStick Portable"
+            VALUE "ProductVersion", "1.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

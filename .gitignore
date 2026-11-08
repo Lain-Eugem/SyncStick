@@ -1,0 +1,31 @@
+# .NET build output
+bin/
+obj/
+.dotnet-home/
+.nuget-packages/
+*.user
+*.suo
+
+# local packaging / screenshots
+dist/
+artifacts/
+portable/build/
+portable/dist/
+portable/testdata/
+portable/*.log
+portable/*.ini
+portable/*-debug.txt
+
+# test data
+.tmp-*/
+.tmp-*
+*.testdata/
+
+# logs and editor files
+*.log
+.vs/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store

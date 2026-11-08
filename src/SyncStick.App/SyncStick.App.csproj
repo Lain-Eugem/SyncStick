@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>SyncStick.App</RootNamespace>
+    <AssemblyName>SyncStick</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\syncstick.ico</ApplicationIcon>
+    <Version>1.0.3</Version>
+    <FileVersion>1.0.3.0</FileVersion>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <Product>SyncStick</Product>
+    <Company>SyncStick</Company>
+    <Description>插上 U 盘就自动同步的桌面工具</Description>
+    <Copyright>本机运行，不上传文件</Copyright>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SyncStick.Core\SyncStick.Core.csproj" />
+    <ProjectReference Include="..\SyncStick.Engine\SyncStick.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\syncstick.ico" />
+    <Resource Include="Assets\syncstick.png" />
+  </ItemGroup>
+</Project>
+
+

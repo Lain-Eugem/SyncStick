@@ -1,0 +1,2 @@
+0206e515fc8135c41846a63b83b46dc0ead4a0c4dd907ff71115eaf9a62683b9  SyncStick-1.0.3-win-x64.zip
+2e9afeee49e1afe8d8a4dd99cd052ca135579c4a3d19c13cf4afc821daa369e8  SyncStickPortable-1.0.1.zip

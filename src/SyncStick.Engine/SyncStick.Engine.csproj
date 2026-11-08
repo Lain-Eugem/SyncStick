@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>SyncStick.Engine</RootNamespace>
+    <AssemblyName>SyncStick.Engine</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SyncStick.Core\SyncStick.Core.csproj" />
+  </ItemGroup>
+</Project>
